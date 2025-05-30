@@ -1,5 +1,19 @@
 # smarterr
 
+With a single line of code:
+
+```go
+return smarterr.AppendSDK(ctx, diags, err, "id", "r-1234567890")
+```
+
+smarterr uses declarative configuration and pulls information from `context.Context`, the call stack (to determine "creating"), a static parameter in the config, and an argument to the `AppendSDK()` call, resulting in this pretty output:
+
+```
+creating CloudWatch Composite Alarm (r-1234567890): operation error CloudWatch: ModifyServerlessCache
+```
+
+---
+
 **smarterr** is a novel Go library and CLI for declarative, layered, and maintainable error message formatting. It lets you define how errors are rendered—across thousands of call sites—using configuration, not code changes. This means you can update, standardize, and improve error messages for both developers and users without refactoring your codebase.
 
 ## Why smarterr?
