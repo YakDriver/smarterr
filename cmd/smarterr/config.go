@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/YakDriver/smarterr/filesystem"
+	"github.com/YakDriver/smarterr"
 	"github.com/YakDriver/smarterr/internal"
 	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/spf13/cobra"
@@ -38,7 +38,7 @@ at the specified directory path. It helps debug layered config resolution.`,
 		fmt.Printf("Loading configuration...\nStart dir: %s\nBase dir: %s\n", startDir, baseDir)
 
 		// Create FileSystem rooted at baseDir
-		fsys := filesystem.NewWrappedFS(baseDir)
+		fsys := smarterr.NewWrappedFS(baseDir)
 
 		// Compute paths relative to baseDir
 		relStartDir, err := filepath.Rel(baseDir, startDir)
@@ -46,8 +46,8 @@ at the specified directory path. It helps debug layered config resolution.`,
 			return fmt.Errorf("failed to relativize startDir: %w", err)
 		}
 
-		// Load config
-		cfg, err := internal.LoadConfig(fsys, relStartDir, ".")
+		// Load config (pass relStackPaths as []string)
+		cfg, err := internal.LoadConfig(fsys, []string{relStartDir}, ".")
 		if err != nil {
 			return fmt.Errorf("failed to load config: %w", err)
 		}
@@ -92,7 +92,7 @@ func convertConfigToHCL(cfg *internal.Config) ([]byte, error) {
 	for _, token := range cfg.Tokens {
 		block := body.AppendNewBlock("token", []string{token.Name})
 		b := block.Body()
-		b.SetAttributeValue("position", cty.NumberIntVal(int64(token.Position)))
+		// b.SetAttributeValue("position", cty.NumberIntVal(int64(token.Position))) // No Position field
 		b.SetAttributeValue("source", cty.StringVal(token.Source))
 
 		if token.Parameter != nil {
@@ -104,21 +104,18 @@ func convertConfigToHCL(cfg *internal.Config) ([]byte, error) {
 		if token.Context != nil {
 			b.SetAttributeValue("context", cty.StringVal(*token.Context))
 		}
-		if token.Error != nil {
-			b.SetAttributeValue("error", cty.StringVal(*token.Error))
-		}
 		if token.Pattern != nil {
 			b.SetAttributeValue("pattern", cty.StringVal(*token.Pattern))
 		}
 		if token.Replace != nil {
 			b.SetAttributeValue("replace", cty.StringVal(*token.Replace))
 		}
-		if len(token.Transform) > 0 {
-			vals := make([]cty.Value, len(token.Transform))
-			for i, v := range token.Transform {
+		if len(token.Transforms) > 0 {
+			vals := make([]cty.Value, len(token.Transforms))
+			for i, v := range token.Transforms {
 				vals[i] = cty.StringVal(v)
 			}
-			b.SetAttributeValue("transform", cty.ListVal(vals))
+			b.SetAttributeValue("transforms", cty.ListVal(vals))
 		}
 		if len(token.StackMatches) > 0 {
 			vals := make([]cty.Value, len(token.StackMatches))

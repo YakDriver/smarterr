@@ -1,17 +1,13 @@
 package internal
 
-import (
-	"embed"
-)
-
 //go:embed testdata/**/**/smarterr.hcl
 //go:embed testdata/**/smarterr.hcl
-var testFiles embed.FS
+//var testFiles embed.FS
 
 /*
 func TestFindConfigPaths(t *testing.T) {
 	// Wrap the embedded filesystem in the filesystem WrappedFS implementation
-	fsys := &filesystem.WrappedFS{FS: &testFiles}
+	fsys := &WrappedFS{FS: &testFiles}
 
 	// Define test cases
 	testCases := []struct {
@@ -364,7 +360,7 @@ func TestMergeConfigs(t *testing.T) {
 /*
 func TestLoadConfig(t *testing.T) {
 	// Wrap the embedded filesystem in the smarterr EmbeddedFS implementation
-	fsys := &filesystem.WrappedFS{FS: &testFiles}
+	fsys := &WrappedFS{FS: &testFiles}
 
 	// Define test cases
 	testCases := []struct {
