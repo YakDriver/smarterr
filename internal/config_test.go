@@ -1,7 +1,7 @@
 package internal
 
-//go:embed testdata/**/**/smarterr.hcl
-//go:embed testdata/**/smarterr.hcl
+// //go:embed testdata/**/**/smarterr.hcl
+// //go:embed testdata/**/smarterr.hcl
 //var testFiles embed.FS
 
 /*

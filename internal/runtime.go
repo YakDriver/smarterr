@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 	"text/template"
+	"text/template/parse"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 )
@@ -19,32 +20,22 @@ type Runtime struct {
 	Args   map[string]any
 	Error  error
 	Diags  diag.Diagnostics
-	Logger Logger
 }
 
-func NewRuntime(cfg *Config, err error, logger Logger, kv ...any) *Runtime {
-	// Use the provided logger or fall back to the global logger
-	if logger == nil {
-		logger = GetGlobalLogger()
-	}
-
+func NewRuntime(cfg *Config, err error, _ interface{}, kv ...any) *Runtime {
 	// Parse key-value pairs
 	args := parseKeyvals(kv...)
-
-	// Log if the configuration or error is nil
+	// Emit debug output if config or error is nil
 	if cfg == nil {
-		logger.Error("Runtime configuration is nil")
+		Debugf("Runtime configuration is nil")
 	}
-
 	if err != nil {
-		logger.Error("Runtime initialized with error: %v", err)
+		Debugf("Runtime initialized with error: %v", err)
 	}
-
 	return &Runtime{
 		Config: cfg,
 		Error:  err,
 		Args:   args,
-		Logger: logger,
 	}
 }
 
@@ -195,8 +186,6 @@ func applyReplace(value string, step TransformStep) string {
 // It supports various source types such as parameters, context values,
 // error inspection, call stack inspection, and runtime arguments.
 func (t *Token) Resolve(ctx context.Context, rt *Runtime) string {
-	logger := rt.Logger
-
 	// Infer source if not set
 	source := t.Source
 	if source == "" {
@@ -220,7 +209,6 @@ func (t *Token) Resolve(ctx context.Context, rt *Runtime) string {
 	case "parameter":
 		// Look up the parameter by name.
 		if t.Parameter == nil {
-			logger.Error("Token %q: parameter name must be set when source is 'parameter'", t.Name)
 			value = fallbackMessage(rt.Config, t.Name)
 		} else {
 			for _, p := range rt.Config.Parameters {
@@ -230,7 +218,6 @@ func (t *Token) Resolve(ctx context.Context, rt *Runtime) string {
 				}
 			}
 			if value == "" {
-				logger.Warn("Token %q: parameter %q not found", t.Name, *t.Parameter)
 				value = fallbackMessage(rt.Config, t.Name)
 			}
 		}
@@ -238,12 +225,10 @@ func (t *Token) Resolve(ctx context.Context, rt *Runtime) string {
 	case "context":
 		// Extract value from context by key.
 		if t.Context == nil {
-			logger.Error("Token %q: context key must be set when source is 'context'", t.Name)
 			value = fallbackMessage(rt.Config, t.Name)
 		} else {
 			val := ctx.Value(*t.Context)
 			if val == nil {
-				logger.Warn("Token %q: context value for key %q not found", t.Name, *t.Context)
 				value = fallbackMessage(rt.Config, t.Name)
 			} else {
 				value = fmt.Sprintf("%v", val)
@@ -265,40 +250,36 @@ func (t *Token) Resolve(ctx context.Context, rt *Runtime) string {
 		// Gather the call stack
 		frames, err := gatherCallStack(3) // Skip 3 frames to exclude runtime.Callers, gatherCallStack, and Resolve
 		if err != nil {
-			logger.Error("Token %q: error gathering call stack: %v", t.Name, err)
 			value = fallbackMessage(rt.Config, t.Name)
 		} else {
 			// Process the filtered stack matches
 			display, err := processStackMatches(filteredStackMatches, frames)
 			if err != nil {
-				logger.Error("Token %q: error processing stack matches: %v", t.Name, err)
 				value = fallbackMessage(rt.Config, t.Name)
 			} else if display != "" {
 				value = display
 			} else {
-				logger.Warn("Token %q: no match found in call stack", t.Name)
 				value = ""
 			}
 		}
 
 	case "error":
-		// Inspect the error (possibly via reflection or a known error interface).
+		// If the token name is "message" or empty, return the error string; otherwise, fallback.
 		if rt.Error == nil {
-			logger.Warn("Token %q: no error provided in runtime", t.Name)
 			value = fallbackMessage(rt.Config, t.Name)
-		} else {
+		} else if t.Name == "message" || t.Name == "error" || t.Name == "" {
 			value = fmt.Sprintf("%s", rt.Error)
+		} else {
+			value = fallbackMessage(rt.Config, t.Name)
 		}
 
 	case "arg":
 		// Pull from runtime arguments.
 		if t.Arg == nil {
-			logger.Error("Token %q: arg key must be set when source is 'arg'", t.Name)
 			value = fallbackMessage(rt.Config, t.Name)
 		} else {
 			argVal, ok := rt.Args[*t.Arg]
 			if !ok {
-				logger.Warn("Token %q: argument not found in runtime args", t.Name)
 				value = fallbackMessage(rt.Config, t.Name)
 			} else {
 				value = fmt.Sprintf("%v", argVal)
@@ -306,7 +287,6 @@ func (t *Token) Resolve(ctx context.Context, rt *Runtime) string {
 		}
 
 	default:
-		logger.Error("Token %q: unknown source %q", t.Name, source)
 		value = fallbackMessage(rt.Config, t.Name)
 	}
 
@@ -403,28 +383,20 @@ func processStackMatches(stackMatches []StackMatch, frames []runtime.Frame) (str
 // It ensures that the kv length is even and that all keys are strings.
 // If the length is not even or a key is not a string, it panics.
 func parseKeyvals(kv ...any) map[string]any {
-	logger := GetGlobalLogger()
-
 	// Check if the length of kv is odd
 	if len(kv)%2 != 0 {
-		logger.Warn("Odd number of key-value arguments: dropping the last key-value pair")
+		Debugf("Odd number of key-value arguments: dropping the last key-value pair")
 		kv = kv[:len(kv)-1] // Remove the last element
 	}
-
 	result := make(map[string]any)
-
 	for i := 0; i < len(kv); i += 2 {
-		// Assert that the key is a string
 		key, ok := kv[i].(string)
 		if !ok {
-			logger.Error("Invalid key type at index %d: expected string, got %T", i, kv[i])
+			Debugf("Invalid key type at index %d: expected string, got %T", i, kv[i])
 			return map[string]any{}
 		}
-
-		// Add the key-value pair to the map
 		result[key] = kv[i+1]
 	}
-
 	return result
 }
 
@@ -440,14 +412,102 @@ func (cfg *Config) RenderTemplate(name string, values map[string]any) (string, e
 	if tmplStr == "" {
 		return "", fmt.Errorf("template %q not found", name)
 	}
+
 	tmpl, err := template.New(name).Parse(tmplStr)
 	if err != nil {
 		return "", err
 	}
+
+	// Scan the template AST for all referenced variables
+	vars := collectTemplateVariables(tmpl)
+	// Pre-populate missing values with fallback
+	for _, v := range vars {
+		if _, ok := values[v]; !ok {
+			values[v] = fallbackMessage(cfg, v)
+		}
+	}
+
 	var buf bytes.Buffer
 	err = tmpl.Execute(&buf, values)
 	if err != nil {
 		return "", err
 	}
 	return buf.String(), nil
+}
+
+// collectTemplateVariables walks the template AST and returns a list of all variable names referenced.
+func collectTemplateVariables(tmpl *template.Template) []string {
+	vars := make(map[string]struct{})
+	for _, t := range tmpl.Templates() {
+		walkNodes(t.Tree.Root, vars)
+	}
+	result := make([]string, 0, len(vars))
+	for v := range vars {
+		result = append(result, v)
+	}
+	return result
+}
+
+// walkNodes recursively walks template nodes and collects variable names.
+func walkNodes(node parse.Node, vars map[string]struct{}) {
+	switch n := node.(type) {
+	case *parse.ListNode:
+		for _, child := range n.Nodes {
+			walkNodes(child, vars)
+		}
+	case *parse.ActionNode:
+		walkNodes(n.Pipe, vars)
+	case *parse.PipeNode:
+		for _, cmd := range n.Cmds {
+			walkNodes(cmd, vars)
+		}
+	case *parse.CommandNode:
+		for _, arg := range n.Args {
+			walkNodes(arg, vars)
+		}
+	case *parse.FieldNode:
+		if len(n.Ident) > 0 {
+			vars[n.Ident[0]] = struct{}{}
+		}
+	case *parse.VariableNode:
+		if len(n.Ident) > 0 {
+			vars[n.Ident[0]] = struct{}{}
+		}
+	case *parse.IfNode:
+		walkNodes(n.Pipe, vars)
+		walkNodes(n.List, vars)
+		if n.ElseList != nil {
+			walkNodes(n.ElseList, vars)
+		}
+	case *parse.RangeNode:
+		walkNodes(n.Pipe, vars)
+		walkNodes(n.List, vars)
+		if n.ElseList != nil {
+			walkNodes(n.ElseList, vars)
+		}
+	case *parse.WithNode:
+		walkNodes(n.Pipe, vars)
+		walkNodes(n.List, vars)
+		if n.ElseList != nil {
+			walkNodes(n.ElseList, vars)
+		}
+		// Add more node types as needed
+	}
+}
+
+func fallbackMessage(cfg *Config, tokenName string) string {
+	mode := "empty"
+	if cfg != nil && cfg.TokenErrorMode != "" {
+		mode = cfg.TokenErrorMode
+	}
+	switch mode {
+	case "detailed":
+		return fmt.Sprintf("[unresolved token: %s]", tokenName)
+	case "placeholder":
+		return fmt.Sprintf("<%s>", tokenName)
+	case "empty":
+		fallthrough
+	default:
+		return ""
+	}
 }

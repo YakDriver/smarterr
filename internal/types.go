@@ -29,16 +29,20 @@ type Transform struct {
 	Steps []TransformStep `hcl:"step,block"`
 }
 
+// SmarterrDebug configures internal smarterr debugging logs (not user-facing logs).
+type SmarterrDebug struct {
+	Output string `hcl:"output,optional"` // Output can be "stdout", "stderr", or a file path.
+}
+
 type Config struct {
-	LogOutput    string       `hcl:"log_output,optional"`
-	LogLevel     string       `hcl:"log_level,optional"`
-	Fallback     string       `hcl:"fallback,optional"`
-	Tokens       []Token      `hcl:"token,block"`
-	Hints        []Hint       `hcl:"hint,block"`
-	Parameters   []Parameter  `hcl:"parameter,block"`
-	StackMatches []StackMatch `hcl:"stack_match,block"`
-	Templates    []Template   `hcl:"template,block"`
-	Transforms   []Transform  `hcl:"transform,block"`
+	SmarterrDebug  *SmarterrDebug `hcl:"smarterr_debug,block"`
+	TokenErrorMode string         `hcl:"token_error_mode,optional"` // 	"detailed", "placeholder", "empty" (default: "empty")
+	Tokens         []Token        `hcl:"token,block"`
+	Hints          []Hint         `hcl:"hint,block"`
+	Parameters     []Parameter    `hcl:"parameter,block"`
+	StackMatches   []StackMatch   `hcl:"stack_match,block"`
+	Templates      []Template     `hcl:"template,block"`
+	Transforms     []Transform    `hcl:"transform,block"`
 }
 
 type Token struct {

@@ -3,7 +3,6 @@ package internal
 import (
 	"context"
 	"errors"
-	"fmt"
 	"reflect"
 	"runtime"
 	"strings"
@@ -87,8 +86,8 @@ func TestToken_Resolve(t *testing.T) {
 				Source: "error",
 			},
 			ctx:      context.Background(),
-			runtime:  NewRuntime(&Config{}, errors.New("example error"), nil),
-			want:     "[error field message placeholder]",
+			runtime:  NewRuntime(&Config{TokenErrorMode: "placeholder"}, errors.New("example error"), nil),
+			want:     "<example>",
 			hasError: false,
 		},
 		{
@@ -102,6 +101,28 @@ func TestToken_Resolve(t *testing.T) {
 			want:     "",
 			hasError: false, // No error is returned, but fallback is used
 		},
+		{
+			name: "Error source - valid error field (detailed mode)",
+			token: Token{
+				Name:   "example",
+				Source: "error",
+			},
+			ctx:      context.Background(),
+			runtime:  NewRuntime(&Config{TokenErrorMode: "detailed"}, errors.New("example error"), nil),
+			want:     "[unresolved token: example]",
+			hasError: false,
+		},
+		{
+			name: "Error source - valid error field (empty mode)",
+			token: Token{
+				Name:   "example",
+				Source: "error",
+			},
+			ctx:      context.Background(),
+			runtime:  NewRuntime(&Config{TokenErrorMode: "empty"}, errors.New("example error"), nil),
+			want:     "",
+			hasError: false,
+		},
 
 		// Arg source tests
 		{
@@ -109,6 +130,7 @@ func TestToken_Resolve(t *testing.T) {
 			token: Token{
 				Name:   "arg1",
 				Source: "arg",
+				Arg:    stringPtr("arg1"),
 			},
 			ctx:      context.Background(),
 			runtime:  NewRuntime(&Config{}, nil, nil, "arg1", "value1"),
@@ -120,6 +142,7 @@ func TestToken_Resolve(t *testing.T) {
 			token: Token{
 				Name:   "arg2",
 				Source: "arg",
+				Arg:    stringPtr("arg2"),
 			},
 			ctx:      context.Background(),
 			runtime:  NewRuntime(&Config{}, nil, nil, "arg1", "value1"),
@@ -313,55 +336,44 @@ func TestGatherCallStack(t *testing.T) {
 
 func TestParseKeyvals(t *testing.T) {
 	tests := []struct {
-		name       string
-		input      []any
-		want       map[string]any
-		wantLogMsg string // Expected log message (if any)
+		name  string
+		input []any
+		want  map[string]any
 	}{
 		{
-			name:       "Valid key-value pairs",
-			input:      []any{"id", "rds", "service", "Provider"},
-			want:       map[string]any{"id": "rds", "service": "Provider"},
-			wantLogMsg: "",
+			name:  "Valid key-value pairs",
+			input: []any{"id", "rds", "service", "Provider"},
+			want:  map[string]any{"id": "rds", "service": "Provider"},
 		},
 		{
-			name:       "Odd number of arguments",
-			input:      []any{"id", "rds", "service"},
-			want:       map[string]any{"id": "rds"},
-			wantLogMsg: "Odd number of key-value arguments: dropping the last key-value pair",
+			name:  "Odd number of arguments",
+			input: []any{"id", "rds", "service"},
+			want:  map[string]any{"id": "rds"},
 		},
 		{
-			name:       "Non-string key",
-			input:      []any{123, "rds", "service", "Provider"},
-			want:       map[string]any{},
-			wantLogMsg: "Invalid key type at index 0: expected string, got int",
+			name:  "Non-string key",
+			input: []any{123, "rds", "service", "Provider"},
+			want:  map[string]any{},
 		},
 		{
-			name:       "Empty input",
-			input:      []any{},
-			want:       map[string]any{},
-			wantLogMsg: "",
+			name:  "Empty input",
+			input: []any{},
+			want:  map[string]any{},
 		},
 		{
-			name:       "Duplicate keys",
-			input:      []any{"id", "rds", "id", "new_rds"},
-			want:       map[string]any{"id": "new_rds"},
-			wantLogMsg: "",
+			name:  "Duplicate keys",
+			input: []any{"id", "rds", "id", "new_rds"},
+			want:  map[string]any{"id": "new_rds"},
 		},
 		{
-			name:       "Nil value",
-			input:      []any{"id", nil, "service", "Provider"},
-			want:       map[string]any{"id": nil, "service": "Provider"},
-			wantLogMsg: "",
+			name:  "Nil value",
+			input: []any{"id", nil, "service", "Provider"},
+			want:  map[string]any{"id": nil, "service": "Provider"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Mock logger to capture log messages
-			mockLogger := &MockLogger{}
-			SetGlobalLogger(mockLogger)
-
 			// Call parseKeyvals
 			got := parseKeyvals(tt.input...)
 
@@ -369,52 +381,6 @@ func TestParseKeyvals(t *testing.T) {
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("parseKeyvals() = %v, want %v", got, tt.want)
 			}
-
-			// Verify the log message (if any)
-			if tt.wantLogMsg != "" {
-				if len(mockLogger.Messages) == 0 {
-					t.Errorf("Expected log message %q, but no log messages were captured", tt.wantLogMsg)
-				} else if !containsLogMessage(mockLogger.Messages, tt.wantLogMsg) {
-					t.Errorf("Expected log message %q, but got %v", tt.wantLogMsg, mockLogger.Messages)
-				}
-			} else if len(mockLogger.Messages) > 0 {
-				t.Errorf("Expected no log messages, but got %v", mockLogger.Messages)
-			}
 		})
 	}
-}
-
-// MockLogger is a mock implementation of the Logger interface to capture log messages.
-type MockLogger struct {
-	Messages []string
-}
-
-func (m *MockLogger) Debug(format string, args ...any) {
-	m.Messages = append(m.Messages, "[DEBUG] "+fmt.Sprintf(format, args...))
-}
-
-func (m *MockLogger) Info(format string, args ...any) {
-	m.Messages = append(m.Messages, "[INFO] "+fmt.Sprintf(format, args...))
-}
-
-func (m *MockLogger) Warn(format string, args ...any) {
-	m.Messages = append(m.Messages, "[WARN] "+fmt.Sprintf(format, args...))
-}
-
-func (m *MockLogger) Error(format string, args ...any) {
-	m.Messages = append(m.Messages, "[ERROR] "+fmt.Sprintf(format, args...))
-}
-
-func (m *MockLogger) SetLevel(level string) {
-	// No-op for mock logger
-}
-
-// containsLogMessage checks if a specific log message exists in the captured log messages.
-func containsLogMessage(messages []string, target string) bool {
-	for _, msg := range messages {
-		if strings.Contains(msg, target) {
-			return true
-		}
-	}
-	return false
 }

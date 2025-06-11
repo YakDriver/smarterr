@@ -9,6 +9,9 @@ import (
 	sdkdiag "github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 )
 
+// Re-export internal.Debugf for internal debugging
+var Debugf = internal.Debugf
+
 var (
 	wrappedFS      FileSystem
 	wrappedBaseDir string
@@ -16,13 +19,16 @@ var (
 
 // SetFS allows the host application to provide a FileSystem implementation and the base directory for path normalization.
 func SetFS(fs FileSystem, baseDir string) {
+	Debugf("SetFS called with baseDir=%q", baseDir)
 	wrappedFS = fs
 	wrappedBaseDir = baseDir
 }
 
 func AppendFW(ctx context.Context, diags fwdiag.Diagnostics, err error, keyvals ...any) {
+	Debugf("AppendFW called with error: %v", err)
 	defer func() {
 		if r := recover(); r != nil {
+			Debugf("Panic recovered in AppendFW: %v", r)
 			// Fallback: original error summary, panic at end of detail
 			summary := firstNWords(err, 3)
 			detail := ""
@@ -44,13 +50,16 @@ func AppendFW(ctx context.Context, diags fwdiag.Diagnostics, err error, keyvals 
 		}
 	}()
 	appendCommon(ctx, func(summary, detail string) {
+		Debugf("AppendFW add error: summary=%q detail=%q", summary, detail)
 		diags.AddError(summary, detail)
 	}, err, keyvals...)
 }
 
 func AppendSDK(ctx context.Context, diags sdkdiag.Diagnostics, err error, keyvals ...any) sdkdiag.Diagnostics {
+	Debugf("AppendSDK called with error: %v", err)
 	defer func() {
 		if r := recover(); r != nil {
+			Debugf("Panic recovered in AppendSDK: %v", r)
 			// Fallback: original error summary, panic at end of detail
 			summary := firstNWords(err, 3)
 			detail := ""
@@ -76,6 +85,7 @@ func AppendSDK(ctx context.Context, diags sdkdiag.Diagnostics, err error, keyval
 		}
 	}()
 	appendCommon(ctx, func(summary, detail string) {
+		Debugf("AppendSDK add error: summary=%q detail=%q", summary, detail)
 		diags = append(diags, sdkdiag.Diagnostic{
 			Severity: sdkdiag.Error,
 			Summary:  summary,
@@ -91,14 +101,18 @@ func AppendSDK(ctx context.Context, diags sdkdiag.Diagnostics, err error, keyval
 // it appends a fallback error message that always includes the original error (if present) in the summary.
 // The add function is used to append the error to the diagnostics in a way appropriate for the caller.
 func appendCommon(ctx context.Context, add func(summary, detail string), err error, keyvals ...any) {
+	Debugf("appendCommon called with error: %v, keyvals: %v", err, keyvals)
 	if wrappedFS == nil {
+		Debugf("No wrappedFS set; calling addFallbackInitError")
 		addFallbackInitError(add, err)
 		return
 	}
 
 	relStackPaths := collectRelStackPaths(wrappedBaseDir)
+	Debugf("collectRelStackPaths returned: %v", relStackPaths)
 	cfg, cfgErr := internal.LoadConfig(wrappedFS, relStackPaths, wrappedBaseDir)
 	if cfgErr != nil {
+		Debugf("Config load error: %v", cfgErr)
 		addFallbackConfigError(add, err, cfgErr)
 		return
 	}
@@ -107,12 +121,14 @@ func appendCommon(ctx context.Context, add func(summary, detail string), err err
 	values := rt.BuildTokenValueMap(ctx)
 
 	summary, detail := renderDiagnostics(cfg, err, values)
+	Debugf("renderDiagnostics returned summary=%q detail=%q", summary, detail)
 	add(summary, detail)
 	emitLogTemplates(ctx, cfg, values)
 }
 
 // addFallbackInitError handles the fallback for missing FS.
 func addFallbackInitError(add func(summary, detail string), err error) {
+	Debugf("addFallbackInitError called with error: %v", err)
 	summary := firstNWords(err, 3)
 	detail := ""
 	if err != nil {
@@ -124,6 +140,7 @@ func addFallbackInitError(add func(summary, detail string), err error) {
 
 // addFallbackConfigError handles the fallback for config load errors.
 func addFallbackConfigError(add func(summary, detail string), err error, cfgErr error) {
+	Debugf("addFallbackConfigError called with error: %v, cfgErr: %v", err, cfgErr)
 	summary := firstNWords(err, 3)
 	detail := ""
 	if err != nil {
@@ -135,6 +152,7 @@ func addFallbackConfigError(add func(summary, detail string), err error, cfgErr 
 
 // collectRelStackPaths normalizes call stack file paths relative to wrappedBaseDir.
 func collectRelStackPaths(baseDir string) []string {
+	Debugf("collectRelStackPaths called with baseDir=%q", baseDir)
 	const stackDepth = 5
 	pcs := make([]uintptr, stackDepth)
 	n := runtime.Callers(2, pcs)
@@ -146,6 +164,7 @@ func collectRelStackPaths(baseDir string) []string {
 			idx := indexOf(frame.File, baseDir+"/")
 			if idx != -1 {
 				rel := frame.File[idx+len(baseDir)+1:]
+				Debugf("Stack frame %d: file=%q rel=%q", i, frame.File, rel)
 				relStackPaths = append(relStackPaths, rel)
 			}
 		}
@@ -158,9 +177,11 @@ func collectRelStackPaths(baseDir string) []string {
 
 // renderDiagnostics renders summary and detail, with fallback if templates fail.
 func renderDiagnostics(cfg *internal.Config, err error, values map[string]any) (string, string) {
+	Debugf("renderDiagnostics called with error: %v, values: %v", err, values)
 	summaryTmpl, summaryErr := cfg.RenderTemplate("error_summary", values)
 	var summary string
 	if summaryErr != nil {
+		Debugf("Summary template error: %v", summaryErr)
 		summary = firstNWords(err, 3)
 	} else {
 		summary = summaryTmpl
@@ -168,6 +189,7 @@ func renderDiagnostics(cfg *internal.Config, err error, values map[string]any) (
 	detailTmpl, detailErr := cfg.RenderTemplate("error_detail", values)
 	var detail string
 	if detailErr != nil || summaryErr != nil {
+		Debugf("Detail template error: %v", detailErr)
 		detail = ""
 		if err != nil {
 			detail = err.Error()
@@ -188,16 +210,21 @@ func renderDiagnostics(cfg *internal.Config, err error, values map[string]any) (
 
 // emitLogTemplates checks for log_error, log_warn, and log_info templates and emits logs if present.
 func emitLogTemplates(ctx context.Context, cfg *internal.Config, values map[string]any) {
+	Debugf("emitLogTemplates called")
 	if globalLogger == nil {
+		Debugf("No globalLogger set; skipping user-facing log emission")
 		return
 	}
 	if tmpl, err := cfg.RenderTemplate("log_error", values); err == nil && tmpl != "" {
+		Debugf("Emitting user-facing log_error: %q", tmpl)
 		globalLogger.Error(ctx, tmpl, values)
 	}
 	if tmpl, err := cfg.RenderTemplate("log_warn", values); err == nil && tmpl != "" {
+		Debugf("Emitting user-facing log_warn: %q", tmpl)
 		globalLogger.Warn(ctx, tmpl, values)
 	}
 	if tmpl, err := cfg.RenderTemplate("log_info", values); err == nil && tmpl != "" {
+		Debugf("Emitting user-facing log_info: %q", tmpl)
 		globalLogger.Info(ctx, tmpl, values)
 	}
 }

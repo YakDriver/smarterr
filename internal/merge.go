@@ -16,19 +16,16 @@ func mergeConfigs(configs []*Config) *Config {
 
 // mergeConfigsPair merges two Config objects: add takes precedence over base.
 //
-// 1. LogOutput, LogLevel, and Fallback are overwritten by add if set.
+// 1. SmarterrDebug and TokenErrorMode are overwritten by add if set.
 // 2. Tokens are merged by name.
 // 3. Hints, Parameters, StackMatches, Templates, and Transforms are merged by name.
 func mergeConfigsPair(base *Config, add *Config) {
-	// Overwrite LogOutput, LogLevel, and Fallback if set in add
-	if add.LogOutput != "" {
-		base.LogOutput = add.LogOutput
+	// Overwrite SmarterrDebug and TokenErrorMode if set in add
+	if add.SmarterrDebug != nil {
+		base.SmarterrDebug = add.SmarterrDebug
 	}
-	if add.LogLevel != "" {
-		base.LogLevel = add.LogLevel
-	}
-	if add.Fallback != "" {
-		base.Fallback = add.Fallback
+	if add.TokenErrorMode != "" {
+		base.TokenErrorMode = add.TokenErrorMode
 	}
 
 	// Merge tokens: replace by name only (positions removed)

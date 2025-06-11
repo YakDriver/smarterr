@@ -29,7 +29,9 @@ func loadConfigMultiStack(fsys FileSystem, relStackPaths []string, baseDir strin
 	if len(configs) == 0 {
 		return &Config{}, nil
 	}
-	return mergeConfigs(configs), nil
+	merged := mergeConfigs(configs)
+	EnableDebug(merged) // Enable internal debug output based on config
+	return merged, nil
 }
 
 // collectConfigsForStack collects and loads all config files relevant to the provided stack paths.

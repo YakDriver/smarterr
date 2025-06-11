@@ -78,14 +78,8 @@ func convertConfigToHCL(cfg *internal.Config) ([]byte, error) {
 	body := file.Body()
 
 	// Top-level attributes
-	if cfg.LogOutput != "" {
-		body.SetAttributeValue("log_output", cty.StringVal(cfg.LogOutput))
-	}
-	if cfg.LogLevel != "" {
-		body.SetAttributeValue("log_level", cty.StringVal(cfg.LogLevel))
-	}
-	if cfg.Fallback != "" {
-		body.SetAttributeValue("fallback", cty.StringVal(cfg.Fallback))
+	if cfg.TokenErrorMode != "" {
+		body.SetAttributeValue("token_error_mode", cty.StringVal(cfg.TokenErrorMode))
 	}
 
 	// Tokens
@@ -157,6 +151,15 @@ func convertConfigToHCL(cfg *internal.Config) ([]byte, error) {
 			b.SetAttributeValue("called_after", cty.StringVal(sm.CalledAfter))
 		}
 		b.SetAttributeValue("display", cty.StringVal(sm.Display))
+	}
+
+	// SmarterrDebug block
+	if cfg.SmarterrDebug != nil {
+		block := body.AppendNewBlock("smarterr_debug", nil)
+		b := block.Body()
+		if cfg.SmarterrDebug.Output != "" {
+			b.SetAttributeValue("output", cty.StringVal(cfg.SmarterrDebug.Output))
+		}
 	}
 
 	return file.Bytes(), nil
