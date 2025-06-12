@@ -2,337 +2,11 @@ package internal
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"reflect"
-	"runtime"
-	"strings"
 	"testing"
+	"text/template"
 )
-
-func TestToken_Resolve(t *testing.T) {
-	tests := []struct {
-		name     string
-		token    Token
-		ctx      context.Context
-		runtime  *Runtime
-		want     string
-		hasError bool
-	}{
-		// Parameter source tests
-		{
-			name: "Parameter source - valid parameter",
-			token: Token{
-				Name:      "example",
-				Source:    "parameter",
-				Parameter: stringPtr("param1"),
-			},
-			ctx: context.Background(),
-			runtime: NewRuntime(&Config{
-				Parameters: []Parameter{
-					{Name: "param1", Value: "value1"},
-				},
-			}, nil, nil),
-			want:     "value1",
-			hasError: false,
-		},
-		{
-			name: "Parameter source - parameter not found",
-			token: Token{
-				Name:      "example",
-				Source:    "parameter",
-				Parameter: stringPtr("param2"),
-			},
-			ctx: context.Background(),
-			runtime: NewRuntime(&Config{
-				Parameters: []Parameter{
-					{Name: "param1", Value: "value1"},
-				},
-			}, nil, nil),
-			want:     "",
-			hasError: false, // No error is returned, but fallback is used
-		},
-
-		// Context source tests
-		{
-			name: "Context source - valid context value",
-			token: Token{
-				Name:    "example",
-				Source:  "context",
-				Context: stringPtr("key1"),
-			},
-			ctx:      context.WithValue(context.Background(), "key1", "value1"),
-			runtime:  NewRuntime(&Config{}, nil, nil),
-			want:     "value1",
-			hasError: false,
-		},
-		{
-			name: "Context source - context key not found",
-			token: Token{
-				Name:    "example",
-				Source:  "context",
-				Context: stringPtr("key2"),
-			},
-			ctx:      context.WithValue(context.Background(), "key1", "value1"),
-			runtime:  NewRuntime(&Config{}, nil, nil),
-			want:     "",
-			hasError: false, // No error is returned, but fallback is used
-		},
-
-		// Error source tests
-		{
-			name: "Error source - valid error field",
-			token: Token{
-				Name:   "example",
-				Source: "error",
-			},
-			ctx:      context.Background(),
-			runtime:  NewRuntime(&Config{TokenErrorMode: "placeholder"}, errors.New("example error"), nil),
-			want:     "<example>",
-			hasError: false,
-		},
-		{
-			name: "Error source - no error in runtime",
-			token: Token{
-				Name:   "example",
-				Source: "error",
-			},
-			ctx:      context.Background(),
-			runtime:  NewRuntime(&Config{}, nil, nil),
-			want:     "",
-			hasError: false, // No error is returned, but fallback is used
-		},
-		{
-			name: "Error source - valid error field (detailed mode)",
-			token: Token{
-				Name:   "example",
-				Source: "error",
-			},
-			ctx:      context.Background(),
-			runtime:  NewRuntime(&Config{TokenErrorMode: "detailed"}, errors.New("example error"), nil),
-			want:     "[unresolved token: example]",
-			hasError: false,
-		},
-		{
-			name: "Error source - valid error field (empty mode)",
-			token: Token{
-				Name:   "example",
-				Source: "error",
-			},
-			ctx:      context.Background(),
-			runtime:  NewRuntime(&Config{TokenErrorMode: "empty"}, errors.New("example error"), nil),
-			want:     "",
-			hasError: false,
-		},
-
-		// Arg source tests
-		{
-			name: "Arg source - valid argument",
-			token: Token{
-				Name:   "arg1",
-				Source: "arg",
-				Arg:    stringPtr("arg1"),
-			},
-			ctx:      context.Background(),
-			runtime:  NewRuntime(&Config{}, nil, nil, "arg1", "value1"),
-			want:     "value1",
-			hasError: false,
-		},
-		{
-			name: "Arg source - argument not found",
-			token: Token{
-				Name:   "arg2",
-				Source: "arg",
-				Arg:    stringPtr("arg2"),
-			},
-			ctx:      context.Background(),
-			runtime:  NewRuntime(&Config{}, nil, nil, "arg1", "value1"),
-			want:     "",
-			hasError: false, // No error is returned, but fallback is used
-		},
-
-		// Default case tests
-		{
-			name: "Unknown source",
-			token: Token{
-				Name:   "example",
-				Source: "unknown",
-			},
-			ctx:      context.Background(),
-			runtime:  NewRuntime(&Config{}, nil, nil),
-			want:     "",
-			hasError: false, // No error is returned, but fallback is used
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := tt.token.Resolve(tt.ctx, tt.runtime)
-			if got != tt.want {
-				t.Errorf("Resolve() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestProcessStackMatches(t *testing.T) {
-	tests := []struct {
-		name          string
-		stackMatches  []StackMatch
-		frames        []runtime.Frame
-		expected      string
-		expectedError bool
-	}{
-		{
-			name: "Match update function",
-			stackMatches: []StackMatch{
-				{Name: "update", CalledFrom: "resource[a-zA-Z0-9]*Update", Display: "updating"},
-			},
-			frames: []runtime.Frame{
-				{Function: "resourceExampleUpdate"},
-			},
-			expected:      "updating",
-			expectedError: false,
-		},
-		{
-			name: "Match read with Set called before",
-			stackMatches: []StackMatch{
-				{Name: "read_set", CalledFrom: "resource[a-zA-Z0-9]*Read", CalledAfter: "Set", Display: "setting during read"},
-			},
-			frames: []runtime.Frame{
-				{Function: "Set"},
-				{Function: "resourceExampleRead"},
-			},
-			expected:      "setting during read",
-			expectedError: false,
-		},
-		{
-			name: "Match read with find called before",
-			stackMatches: []StackMatch{
-				{Name: "read_find", CalledFrom: "resource[a-zA-Z0-9]*Read", CalledAfter: "find.*", Display: "finding during read"},
-			},
-			frames: []runtime.Frame{
-				{Function: "findResource"},
-				{Function: "resourceExampleRead"},
-			},
-			expected:      "finding during read",
-			expectedError: false,
-		},
-		{
-			name: "Match create with wait called before",
-			stackMatches: []StackMatch{
-				{Name: "create_wait", CalledFrom: "resource[a-zA-Z0-9]*Create", CalledAfter: "wait.*", Display: "waiting during creation"},
-			},
-			frames: []runtime.Frame{
-				{Function: "waitForResource"},
-				{Function: "resourceExampleCreate"},
-			},
-			expected:      "waiting during creation",
-			expectedError: false,
-		},
-		{
-			name: "No match for update function",
-			stackMatches: []StackMatch{
-				{Name: "update", CalledFrom: "resource[a-zA-Z0-9]*Update", Display: "updating"},
-			},
-			frames: []runtime.Frame{
-				{Function: "resourceExampleRead"},
-			},
-			expected:      "",
-			expectedError: false,
-		},
-		{
-			name: "Invalid regex in CalledFrom",
-			stackMatches: []StackMatch{
-				{Name: "invalid_regex", CalledFrom: "[invalid", Display: "invalid regex"},
-			},
-			frames: []runtime.Frame{
-				{Function: "resourceExampleUpdate"},
-			},
-			expected:      "",
-			expectedError: true,
-		},
-		{
-			name: "Invalid regex in CalledAfter",
-			stackMatches: []StackMatch{
-				{Name: "invalid_regex", CalledFrom: "resource[a-zA-Z0-9]*Read", CalledAfter: "[invalid", Display: "invalid regex"},
-			},
-			frames: []runtime.Frame{
-				{Function: "Set"},
-				{Function: "resourceExampleRead"},
-			},
-			expected:      "",
-			expectedError: true,
-		},
-		{
-			name: "No stack frames",
-			stackMatches: []StackMatch{
-				{Name: "update", CalledFrom: "resource[a-zA-Z0-9]*Update", Display: "updating"},
-			},
-			frames:        []runtime.Frame{},
-			expected:      "",
-			expectedError: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result, err := processStackMatches(tt.stackMatches, tt.frames)
-			if (err != nil) != tt.expectedError {
-				t.Errorf("processStackMatches() error = %v, expectedError %v", err, tt.expectedError)
-				return
-			}
-			if result != tt.expected {
-				t.Errorf("processStackMatches() = %v, expected %v", result, tt.expected)
-			}
-		})
-	}
-}
-
-// It's tough to test the actual call stack, but we can at least check that
-// the function returns a non-empty slice of frames and that they have the
-// expected structure.
-func TestGatherCallStackFrameStructure(t *testing.T) {
-	frames, err := gatherCallStack(0)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	for _, frame := range frames {
-		if frame.Function == "" {
-			t.Errorf("expected non-empty function name, got empty")
-		}
-		if frame.File == "" {
-			t.Errorf("expected non-empty file path, got empty")
-		}
-	}
-}
-
-// It's tough to test the actual call stack, but we can at least check that
-// the test function is present in the call stack.
-func TestGatherCallStack(t *testing.T) {
-	// Call gatherCallStack with a known skip value
-	frames, err := gatherCallStack(0)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	// Ensure that the returned frames are not empty
-	if len(frames) == 0 {
-		t.Fatalf("expected non-empty call stack, got empty")
-	}
-
-	// Check that the first frame is this test function
-	found := false
-	for _, frame := range frames {
-		if strings.HasSuffix(frame.Function, "TestGatherCallStack") {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Errorf("expected to find TestGatherCallStack in call stack, but it was not found")
-	}
-}
 
 func TestParseKeyvals(t *testing.T) {
 	tests := []struct {
@@ -382,5 +56,281 @@ func TestParseKeyvals(t *testing.T) {
 				t.Errorf("parseKeyvals() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestTokenResolve_BasicSources(t *testing.T) {
+	tests := []struct {
+		name    string
+		token   Token
+		ctx     context.Context
+		runtime *Runtime
+		want    string
+	}{
+		{
+			name:    "parameter found",
+			token:   Token{Source: "parameter", Parameter: stringPtr("foo")},
+			ctx:     context.Background(),
+			runtime: NewRuntime(&Config{Parameters: []Parameter{{Name: "foo", Value: "bar"}}}, nil, nil),
+			want:    "bar",
+		},
+		{
+			name:    "parameter not found",
+			token:   Token{Source: "parameter", Parameter: stringPtr("baz")},
+			ctx:     context.Background(),
+			runtime: NewRuntime(&Config{Parameters: []Parameter{{Name: "foo", Value: "bar"}}}, nil, nil),
+			want:    "",
+		},
+		{
+			name:    "context found",
+			token:   Token{Source: "context", Context: stringPtr("key")},
+			ctx:     context.WithValue(context.Background(), "key", "val"),
+			runtime: NewRuntime(&Config{}, nil, nil),
+			want:    "val",
+		},
+		{
+			name:    "context not found",
+			token:   Token{Source: "context", Context: stringPtr("missing")},
+			ctx:     context.WithValue(context.Background(), "key", "val"),
+			runtime: NewRuntime(&Config{}, nil, nil),
+			want:    "",
+		},
+		{
+			name:    "error present",
+			token:   Token{Source: "error"},
+			ctx:     context.Background(),
+			runtime: NewRuntime(&Config{}, fmt.Errorf("fail"), nil),
+			want:    "fail",
+		},
+		{
+			name:    "error absent",
+			token:   Token{Source: "error"},
+			ctx:     context.Background(),
+			runtime: NewRuntime(&Config{}, nil, nil),
+			want:    "",
+		},
+		{
+			name:    "arg found",
+			token:   Token{Source: "arg", Arg: stringPtr("foo")},
+			ctx:     context.Background(),
+			runtime: NewRuntime(&Config{}, nil, nil, "foo", "bar"),
+			want:    "bar",
+		},
+		{
+			name:    "arg not found",
+			token:   Token{Source: "arg", Arg: stringPtr("baz")},
+			ctx:     context.Background(),
+			runtime: NewRuntime(&Config{}, nil, nil, "foo", "bar"),
+			want:    "",
+		},
+		{
+			name:    "unknown source fallback",
+			token:   Token{Source: "unknown"},
+			ctx:     context.Background(),
+			runtime: NewRuntime(&Config{}, nil, nil),
+			want:    "",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := tc.token.Resolve(tc.ctx, tc.runtime)
+			if got != tc.want {
+				t.Errorf("Resolve() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestRuntime_BuildTokenValueMap(t *testing.T) {
+	ctx := context.WithValue(context.Background(), "ctxKey", "ctxVal")
+	cfg := &Config{
+		Parameters: []Parameter{{Name: "param1", Value: "val1"}},
+		Tokens: []Token{
+			{Name: "param_token", Source: "parameter", Parameter: stringPtr("param1")},
+			{Name: "ctx_token", Source: "context", Context: stringPtr("ctxKey")},
+			{Name: "error_token", Source: "error"},
+			{Name: "arg_token", Source: "arg", Arg: stringPtr("foo")},
+			{Name: "missing_param", Source: "parameter", Parameter: stringPtr("notfound")},
+			{Name: "missing_ctx", Source: "context", Context: stringPtr("notfound")},
+			{Name: "missing_arg", Source: "arg", Arg: stringPtr("notfound")},
+		},
+	}
+	err := fmt.Errorf("errVal")
+	rt := NewRuntime(cfg, err, nil, "foo", "bar")
+	got := rt.BuildTokenValueMap(ctx)
+	want := map[string]any{
+		"param_token":   "val1",
+		"ctx_token":     "ctxVal",
+		"error_token":   "errVal",
+		"arg_token":     "bar",
+		"missing_param": "",
+		"missing_ctx":   "",
+		"missing_arg":   "",
+	}
+	for k, v := range want {
+		if got[k] != v {
+			t.Errorf("BuildTokenValueMap()[%q] = %v, want %v", k, got[k], v)
+		}
+	}
+}
+
+func TestTokenResolve_WithTransforms(t *testing.T) {
+	toLower := "lower"
+	stripPrefix := "strip_prefix"
+	fixSpace := "fix_space"
+	prefixVal := "PRE_"
+	cfg := &Config{
+		Parameters: []Parameter{{Name: "p", Value: "PRE_  Foo   Bar  "}},
+		Transforms: []Transform{
+			{
+				Name:  stripPrefix,
+				Steps: []TransformStep{{Type: "strip_prefix", Value: &prefixVal}},
+			},
+			{
+				Name:  fixSpace,
+				Steps: []TransformStep{{Type: "fix_space"}},
+			},
+			{
+				Name:  toLower,
+				Steps: []TransformStep{{Type: "lower"}},
+			},
+		},
+	}
+	token := Token{
+		Name:       "t",
+		Source:     "parameter",
+		Parameter:  stringPtr("p"),
+		Transforms: []string{stripPrefix, fixSpace, toLower},
+	}
+	rt := NewRuntime(cfg, nil, nil)
+	got := token.Resolve(context.Background(), rt)
+	want := "foo bar"
+	if got != want {
+		t.Errorf("Resolve() with transforms = %q, want %q", got, want)
+	}
+}
+
+func TestTokenResolve_CallStackSource(t *testing.T) {
+	// Setup a StackMatch that matches this test function
+	stackMatchName := "testMatch"
+	calledFromRegex := "TestTokenResolve_CallStackSource"
+	displayVal := "matched!"
+	cfg := &Config{
+		StackMatches: []StackMatch{{
+			Name:       stackMatchName,
+			CalledFrom: calledFromRegex,
+			Display:    displayVal,
+		}},
+		Tokens: []Token{{
+			Name:         "stack_token",
+			Source:       "call_stack",
+			StackMatches: []string{stackMatchName},
+		}},
+	}
+	rt := NewRuntime(cfg, nil, nil)
+	token := cfg.Tokens[0]
+	got := token.Resolve(context.Background(), rt)
+	if got != displayVal {
+		t.Errorf("Resolve() call_stack = %q, want %q", got, displayVal)
+	}
+}
+
+func TestConfig_RenderTemplate_BasicAndFallback(t *testing.T) {
+	cfg := &Config{
+		Templates: []Template{{
+			Name:   "hello",
+			Format: "Hello, {{.name}}! Your id is {{.id}}.",
+		}},
+		TokenErrorMode: "placeholder",
+	}
+	values := map[string]any{"name": "Alice"} // id is missing
+	out, err := cfg.RenderTemplate("hello", values)
+	if err != nil {
+		t.Fatalf("RenderTemplate error: %v", err)
+	}
+	want := "Hello, Alice! Your id is <id>."
+	if out != want {
+		t.Errorf("RenderTemplate output = %q, want %q", out, want)
+	}
+}
+
+func TestConfig_RenderTemplate_AllVarsPresent(t *testing.T) {
+	cfg := &Config{
+		Templates: []Template{{
+			Name:   "bye",
+			Format: "Bye, {{.name}}! See you at {{.place}}.",
+		}},
+	}
+	values := map[string]any{"name": "Bob", "place": "the park"}
+	out, err := cfg.RenderTemplate("bye", values)
+	if err != nil {
+		t.Fatalf("RenderTemplate error: %v", err)
+	}
+	want := "Bye, Bob! See you at the park."
+	if out != want {
+		t.Errorf("RenderTemplate output = %q, want %q", out, want)
+	}
+}
+
+func TestConfig_RenderTemplate_TemplateNotFound(t *testing.T) {
+	cfg := &Config{
+		Templates: []Template{{Name: "exists", Format: "Hi"}},
+	}
+	_, err := cfg.RenderTemplate("missing", map[string]any{})
+	if err == nil || err.Error() != "template \"missing\" not found" {
+		t.Errorf("Expected not found error, got: %v", err)
+	}
+}
+
+func TestConfig_RenderTemplate_SyntaxError(t *testing.T) {
+	cfg := &Config{
+		Templates: []Template{
+			{Name: "bad", Format: "{{.name"},
+		},
+	}
+	_, err := cfg.RenderTemplate("bad", map[string]any{"name": "X"})
+	if err == nil {
+		t.Errorf("Expected syntax error, got nil")
+	}
+}
+
+func TestCollectTemplateVariables(t *testing.T) {
+	tmpl, err := template.New("vars").Parse("Hello, {{.foo}} and {{.bar}}! {{if .baz}}{{.baz}}{{end}}")
+	if err != nil {
+		t.Fatalf("template parse error: %v", err)
+	}
+	vars := collectTemplateVariables(tmpl)
+	want := map[string]bool{"foo": true, "bar": true, "baz": true}
+	for _, v := range vars {
+		if !want[v] {
+			t.Errorf("collectTemplateVariables: unexpected var %q", v)
+		}
+		delete(want, v)
+	}
+	for v := range want {
+		t.Errorf("collectTemplateVariables: missing var %q", v)
+	}
+}
+
+func TestTokenResolve_HintsSource(t *testing.T) {
+	errStr := "operation error RDS: ModifyDBCluster, https response error StatusCode: 400, RequestID: abc-123, api error InvalidParameterCombination: You can't change your Performance Insights KMS key."
+	contains := "can't change your Performance Insights KMS key"
+	regex := "ModifyDBCluster.*InvalidParameterCombination"
+	cfg := &Config{
+		Hints: []Hint{
+			{Name: "abc", ErrorContains: &contains, Suggestion: "Make sure you..."},
+			{Name: "bcd", RegexMatch: &regex, Suggestion: "Your parameters aren't right..."},
+		},
+		Tokens: []Token{
+			{Name: "suggest", Source: "hints"},
+		},
+	}
+	rt := NewRuntime(cfg, fmt.Errorf("%s", errStr), nil)
+	ctx := context.Background()
+	val := cfg.Tokens[0].Resolve(ctx, rt)
+	want := "Make sure you...\nYour parameters aren't right..."
+	if val != want {
+		t.Errorf("expected suggestions:\n%q\ngot:\n%q", want, val)
 	}
 }

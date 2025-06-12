@@ -130,13 +130,12 @@ func convertConfigToHCL(cfg *internal.Config) ([]byte, error) {
 	for _, hint := range cfg.Hints {
 		block := body.AppendNewBlock("hint", []string{hint.Name})
 		b := block.Body()
-
-		// Convert hint.match map to object
-		matchAttrs := make(map[string]cty.Value, len(hint.Match))
-		for k, v := range hint.Match {
-			matchAttrs[k] = cty.StringVal(v)
+		if hint.ErrorContains != nil {
+			b.SetAttributeValue("error_contains", cty.StringVal(*hint.ErrorContains))
 		}
-		b.SetAttributeValue("match", cty.ObjectVal(matchAttrs))
+		if hint.RegexMatch != nil {
+			b.SetAttributeValue("regex_match", cty.StringVal(*hint.RegexMatch))
+		}
 		b.SetAttributeValue("suggestion", cty.StringVal(hint.Suggestion))
 	}
 

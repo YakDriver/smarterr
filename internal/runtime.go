@@ -44,6 +44,7 @@ func (rt *Runtime) applyTransforms(token *Token, value string) string {
 	if len(token.Transforms) == 0 || rt.Config == nil {
 		return value
 	}
+	Debugf("Applying transforms to token %q: %v", token.Name, token.Transforms)
 	for _, tname := range token.Transforms {
 		var tdef *Transform
 		for i := range rt.Config.Transforms {
@@ -78,6 +79,7 @@ func (rt *Runtime) applyTransforms(token *Token, value string) string {
 			}
 		}
 	}
+	Debugf("Transformed value for token %q: %q", token.Name, value)
 	return value
 }
 
@@ -186,6 +188,8 @@ func applyReplace(value string, step TransformStep) string {
 // It supports various source types such as parameters, context values,
 // error inspection, call stack inspection, and runtime arguments.
 func (t *Token) Resolve(ctx context.Context, rt *Runtime) string {
+	Debugf("Resolving token: %s, source: %s, parameter: %v, context: %v, arg: %v, stack_matches: %v",
+		t.Name, t.Source, t.Parameter, t.Context, t.Arg, t.StackMatches)
 	// Infer source if not set
 	source := t.Source
 	if source == "" {
@@ -264,13 +268,11 @@ func (t *Token) Resolve(ctx context.Context, rt *Runtime) string {
 		}
 
 	case "error":
-		// If the token name is "message" or empty, return the error string; otherwise, fallback.
+		Debugf("Resolving error token: %s, err: %s", t.Name, rt.Error)
 		if rt.Error == nil {
 			value = fallbackMessage(rt.Config, t.Name)
-		} else if t.Name == "message" || t.Name == "error" || t.Name == "" {
-			value = fmt.Sprintf("%s", rt.Error)
 		} else {
-			value = fallbackMessage(rt.Config, t.Name)
+			value = fmt.Sprintf("%s", rt.Error)
 		}
 
 	case "arg":
@@ -286,10 +288,46 @@ func (t *Token) Resolve(ctx context.Context, rt *Runtime) string {
 			}
 		}
 
+	case "hints":
+		Debugf("Resolving hints token: %s", t.Name)
+		if rt.Error != nil {
+			errStr := rt.Error.Error()
+			var suggestions []string
+			for _, hint := range rt.Config.Hints {
+				Debugf("Checking hint %q against error: %s", hint.Name, errStr)
+				matched := true
+				if hint.ErrorContains != nil && *hint.ErrorContains != "" {
+					if !strings.Contains(errStr, *hint.ErrorContains) {
+						Debugf("Hint %q did not match error_contains: %s", hint.Name, *hint.ErrorContains)
+						matched = false
+					} else {
+						Debugf("Hint %q matched error_contains: %s", hint.Name, *hint.ErrorContains)
+					}
+				}
+				if hint.RegexMatch != nil && *hint.RegexMatch != "" {
+					re, err := regexp.Compile(*hint.RegexMatch)
+					if err != nil || !re.MatchString(errStr) {
+						Debugf("Hint %q did not match regex: %s", hint.Name, *hint.RegexMatch)
+						matched = false
+					} else {
+						Debugf("Hint %q matched regex: %s", hint.Name, *hint.RegexMatch)
+					}
+				}
+				if matched {
+					suggestions = append(suggestions, hint.Suggestion)
+				}
+			}
+			value = strings.Join(suggestions, "\n")
+		}
+		if value == "" {
+			value = fallbackMessage(rt.Config, t.Name)
+		}
+
 	default:
 		value = fallbackMessage(rt.Config, t.Name)
 	}
 
+	Debugf("Resolved token %q with source %q: %q", t.Name, source, value)
 	// Only apply transforms if t.Transforms is non-nil and non-empty
 	if t.Transforms != nil && len(t.Transforms) > 0 {
 		value = rt.applyTransforms(t, value)

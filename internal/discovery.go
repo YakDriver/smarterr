@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/hashicorp/hcl/v2/gohcl"
@@ -15,6 +16,7 @@ import (
 
 // LoadConfig loads and merges configuration files from a filesystem.
 func LoadConfig(fsys FileSystem, relStackPaths []string, baseDir string) (*Config, error) {
+	Debugf("LoadConfig called with baseDir=%q relStackPaths=%v", baseDir, relStackPaths)
 	return loadConfigMultiStack(fsys, relStackPaths, baseDir)
 }
 
@@ -37,7 +39,11 @@ func loadConfigMultiStack(fsys FileSystem, relStackPaths []string, baseDir strin
 // collectConfigsForStack collects and loads all config files relevant to the provided stack paths.
 // This is the main entry for config discovery in embedded FS mode.
 func collectConfigsForStack(fsys FileSystem, relStackPaths []string, baseDir string) ([]*Config, error) {
-	var configs []*Config
+	type configWithPath struct {
+		cfg  *Config
+		path string
+	}
+	var cfgsWithPaths []configWithPath
 	globalConfigPath, candidateConfigs, err := findAllConfigPaths(fsys)
 	if err != nil {
 		return nil, err
@@ -49,7 +55,7 @@ func collectConfigsForStack(fsys FileSystem, relStackPaths []string, baseDir str
 		if err != nil {
 			return nil, fmt.Errorf("error loading global config: %w", err)
 		}
-		configs = append(configs, cfg)
+		cfgsWithPaths = append(cfgsWithPaths, configWithPath{cfg, globalConfigPath})
 	}
 
 	sep := string(filepath.Separator)
@@ -62,10 +68,18 @@ func collectConfigsForStack(fsys FileSystem, relStackPaths []string, baseDir str
 				if err != nil {
 					return nil, fmt.Errorf("error loading config %s: %w", configPath, err)
 				}
-				configs = append(configs, cfg)
+				cfgsWithPaths = append(cfgsWithPaths, configWithPath{cfg, configPath})
 				break // Only need to match once per config
 			}
 		}
+	}
+	// Sort by path depth (least specific first, most specific last)
+	sort.Slice(cfgsWithPaths, func(i, j int) bool {
+		return strings.Count(cfgsWithPaths[i].path, sep) < strings.Count(cfgsWithPaths[j].path, sep)
+	})
+	var configs []*Config
+	for _, c := range cfgsWithPaths {
+		configs = append(configs, c.cfg)
 	}
 	return configs, nil
 }

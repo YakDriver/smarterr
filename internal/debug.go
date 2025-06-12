@@ -26,7 +26,6 @@ var (
 func EnableDebug(cfg *Config) {
 	debugMutex.Lock()
 	defer debugMutex.Unlock()
-	fmt.Printf("Enabling internal debug output: %t %t\n", cfg != nil, cfg.SmarterrDebug != nil)
 	if cfg != nil && cfg.SmarterrDebug != nil {
 		globalDebugEnabled = true
 		if cfg.SmarterrDebug.Output == "stdout" {

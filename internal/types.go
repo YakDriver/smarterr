@@ -63,9 +63,10 @@ type Parameter struct {
 }
 
 type Hint struct {
-	Name       string            `hcl:"name,label"`
-	Match      map[string]string `hcl:"match"`
-	Suggestion string            `hcl:"suggestion"`
+	Name          string  `hcl:"name,label"`
+	ErrorContains *string `hcl:"error_contains,optional"`
+	RegexMatch    *string `hcl:"regex_match,optional"`
+	Suggestion    string  `hcl:"suggestion"`
 }
 
 type StackMatch struct {
