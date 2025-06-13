@@ -293,6 +293,16 @@ func (t *Token) Resolve(ctx context.Context, rt *Runtime) string {
 		if rt.Error != nil {
 			errStr := rt.Error.Error()
 			var suggestions []string
+			matchMode := "all"
+			joinChar := "\n"
+			if rt.Config.Smarterr != nil {
+				if rt.Config.Smarterr.HintMatchMode != nil && *rt.Config.Smarterr.HintMatchMode != "" {
+					matchMode = *rt.Config.Smarterr.HintMatchMode
+				}
+				if rt.Config.Smarterr.HintJoinChar != nil {
+					joinChar = *rt.Config.Smarterr.HintJoinChar
+				}
+			}
 			for _, hint := range rt.Config.Hints {
 				Debugf("Checking hint %q against error: %s", hint.Name, errStr)
 				matched := true
@@ -315,9 +325,15 @@ func (t *Token) Resolve(ctx context.Context, rt *Runtime) string {
 				}
 				if matched {
 					suggestions = append(suggestions, hint.Suggestion)
+					if matchMode == "first" {
+						break
+					}
+				}
+				if matchMode == "first" && len(suggestions) > 0 {
+					break
 				}
 			}
-			value = strings.Join(suggestions, "\n")
+			value = strings.Join(suggestions, joinChar)
 		}
 		if value == "" {
 			value = fallbackMessage(rt.Config, t.Name)
