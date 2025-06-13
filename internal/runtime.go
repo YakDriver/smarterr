@@ -219,7 +219,8 @@ func (t *Token) Resolve(ctx context.Context, rt *Runtime) string {
 	case "parameter":
 		// Look up the parameter by name.
 		if t.Parameter == nil {
-			value = fallbackMessage(rt.Config, t.Name)
+			Debugf("Fallback for token %q: token.Parameter is nil", t.Name)
+			value = fallbackMessage(rt.Config, t.Name, "token.Parameter is nil")
 		} else {
 			for _, p := range rt.Config.Parameters {
 				if p.Name == *t.Parameter {
@@ -228,18 +229,21 @@ func (t *Token) Resolve(ctx context.Context, rt *Runtime) string {
 				}
 			}
 			if value == "" {
-				value = fallbackMessage(rt.Config, t.Name)
+				Debugf("Fallback for token %q: parameter not found in config", t.Name)
+				value = fallbackMessage(rt.Config, t.Name, "parameter not found in config")
 			}
 		}
 
 	case "context":
 		// Extract value from context by key.
 		if t.Context == nil {
-			value = fallbackMessage(rt.Config, t.Name)
+			Debugf("Fallback for token %q: token.Context is nil", t.Name)
+			value = fallbackMessage(rt.Config, t.Name, "token.Context is nil")
 		} else {
 			val := ctx.Value(*t.Context)
 			if val == nil {
-				value = fallbackMessage(rt.Config, t.Name)
+				Debugf("Fallback for token %q: context value is nil", t.Name)
+				value = fallbackMessage(rt.Config, t.Name, "context value is nil")
 			} else {
 				value = fmt.Sprintf("%v", val)
 			}
@@ -260,23 +264,27 @@ func (t *Token) Resolve(ctx context.Context, rt *Runtime) string {
 		// Gather the call stack
 		frames, err := gatherCallStack(3) // Skip 3 frames to exclude runtime.Callers, gatherCallStack, and Resolve
 		if err != nil {
-			value = fallbackMessage(rt.Config, t.Name)
+			Debugf("Fallback for token %q: call stack unavailable", t.Name)
+			value = fallbackMessage(rt.Config, t.Name, "call stack unavailable")
 		} else {
 			// Process the filtered stack matches
 			display, err := processStackMatches(filteredStackMatches, frames)
 			if err != nil {
-				value = fallbackMessage(rt.Config, t.Name)
+				Debugf("Fallback for token %q: stack match error: %s", t.Name, err.Error())
+				value = fallbackMessage(rt.Config, t.Name, "stack match error: "+err.Error())
 			} else if display != "" {
 				value = display
 			} else {
-				value = ""
+				Debugf("Fallback for token %q: no stack match found", t.Name)
+				value = fallbackMessage(rt.Config, t.Name, "no stack match found")
 			}
 		}
 
 	case "error":
 		Debugf("Resolving error token: %s, err: %s", t.Name, rt.Error)
 		if rt.Error == nil {
-			value = fallbackMessage(rt.Config, t.Name)
+			Debugf("Fallback for token %q: rt.Error is nil", t.Name)
+			value = fallbackMessage(rt.Config, t.Name, "rt.Error is nil")
 		} else {
 			value = fmt.Sprintf("%s", rt.Error)
 		}
@@ -284,11 +292,13 @@ func (t *Token) Resolve(ctx context.Context, rt *Runtime) string {
 	case "arg":
 		// Pull from runtime arguments.
 		if t.Arg == nil {
-			value = fallbackMessage(rt.Config, t.Name)
+			Debugf("Fallback for token %q: token.Arg is nil", t.Name)
+			value = fallbackMessage(rt.Config, t.Name, "token.Arg is nil")
 		} else {
 			argVal, ok := rt.Args[*t.Arg]
 			if !ok {
-				value = fallbackMessage(rt.Config, t.Name)
+				Debugf("Fallback for token %q: argument not found in runtime args", t.Name)
+				value = fallbackMessage(rt.Config, t.Name, "argument not found in runtime args")
 			} else {
 				value = fmt.Sprintf("%v", argVal)
 			}
@@ -297,15 +307,16 @@ func (t *Token) Resolve(ctx context.Context, rt *Runtime) string {
 	case "hints":
 		Debugf("Resolving hints token: %s", t.Name)
 		if rt.Error != nil {
-			// If diagnostics aggregation is ever enabled, pass it here (nil for now)
 			value = resolveHints(rt.Error.Error(), rt.Config, nil)
 		}
 		if value == "" {
-			value = fallbackMessage(rt.Config, t.Name)
+			Debugf("Fallback for token %q: no matching hint found", t.Name)
+			value = fallbackMessage(rt.Config, t.Name, "no matching hint found")
 		}
 
 	default:
-		value = fallbackMessage(rt.Config, t.Name)
+		Debugf("Fallback for token %q: unknown token source", t.Name)
+		value = fallbackMessage(rt.Config, t.Name, "unknown token source")
 	}
 
 	Debugf("Resolved token %q with source %q: %q", t.Name, source, value)
@@ -456,7 +467,8 @@ func (cfg *Config) RenderTemplate(name string, values map[string]any) (string, e
 	// Pre-populate missing values with fallback
 	for _, v := range vars {
 		if _, ok := values[v]; !ok {
-			values[v] = fallbackMessage(cfg, v)
+			Debugf("Fallback for template variable %q: not found in values", v)
+			values[v] = fallbackMessage(cfg, v, "template variable not found in values")
 		}
 	}
 
@@ -528,13 +540,16 @@ func walkNodes(node parse.Node, vars map[string]struct{}) {
 	}
 }
 
-func fallbackMessage(cfg *Config, tokenName string) string {
+func fallbackMessage(cfg *Config, tokenName string, msg string) string {
 	mode := "empty"
 	if cfg != nil && cfg.Smarterr != nil && cfg.Smarterr.TokenErrorMode != "" {
 		mode = cfg.Smarterr.TokenErrorMode
 	}
 	switch mode {
 	case "detailed":
+		if msg != "" {
+			return fmt.Sprintf("[unresolved token: %s] (%s)", tokenName, msg)
+		}
 		return fmt.Sprintf("[unresolved token: %s]", tokenName)
 	case "placeholder":
 		return fmt.Sprintf("<%s>", tokenName)
