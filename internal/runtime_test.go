@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"runtime"
 	"testing"
 	"text/template"
 )
@@ -332,5 +333,64 @@ func TestTokenResolve_HintsSource(t *testing.T) {
 	want := "Make sure you...\nYour parameters aren't right..."
 	if val != want {
 		t.Errorf("expected suggestions:\n%q\ngot:\n%q", want, val)
+	}
+}
+
+func TestProcessStackMatches_SpecificityPreference(t *testing.T) {
+	matches := []StackMatch{
+		{Name: "create", CalledFrom: "resource[a-zA-Z0-9]*Create", Display: "creating"},
+		{Name: "read", CalledFrom: "resource[a-zA-Z0-9]*Read", Display: "reading"},
+		{Name: "create_wait", CalledFrom: "resource[a-zA-Z0-9]*Create", CalledAfter: "wait.*", Display: "waiting during creation"},
+		{Name: "read_find", CalledFrom: "resource[a-zA-Z0-9]*Read", CalledAfter: "find.*", Display: "finding during read"},
+		{Name: "read_set", CalledFrom: "resource[a-zA-Z0-9]*Read", CalledAfter: "Set", Display: "setting during read"},
+	}
+
+	tests := []struct {
+		name   string
+		frames []runtime.Frame
+		want   string
+	}{
+		{
+			name:   "most specific: create_wait",
+			frames: []runtime.Frame{{Function: "resourceFooCreate"}, {Function: "waitForSomething"}},
+			want:   "waiting during creation",
+		},
+		{
+			name:   "most specific: read_find",
+			frames: []runtime.Frame{{Function: "resourceFooRead"}, {Function: "findBar"}},
+			want:   "finding during read",
+		},
+		{
+			name:   "most specific: read_set",
+			frames: []runtime.Frame{{Function: "resourceBarRead"}, {Function: "Set"}},
+			want:   "setting during read",
+		},
+		{
+			name:   "fallback to called_after only",
+			frames: []runtime.Frame{{Function: "foo"}, {Function: "Set"}},
+			want:   "",
+		},
+		{
+			name:   "fallback to called_from only",
+			frames: []runtime.Frame{{Function: "resourceFooCreate"}},
+			want:   "creating",
+		},
+		{
+			name:   "fallback to called_from only (read)",
+			frames: []runtime.Frame{{Function: "resourceFooRead"}},
+			want:   "reading",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			display, err := processStackMatches(matches, tc.frames)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if display != tc.want {
+				t.Errorf("got %q, want %q", display, tc.want)
+			}
+		})
 	}
 }

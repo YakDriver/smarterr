@@ -384,8 +384,6 @@ func gatherCallStack(skip int) ([]runtime.Frame, error) {
 // If a match is found, it returns the Display value of the matching rule.
 // Note, if neither CalledFrom nor CalledAfter is specified, it will match and return display.
 func processStackMatches(stackMatches []StackMatch, frames []runtime.Frame) (string, error) {
-	var previousFunc string
-
 	// Partition stackMatches by specificity
 	var both, afterOnly, fromOnly, neither []StackMatch
 	for _, sm := range stackMatches {
@@ -402,16 +400,19 @@ func processStackMatches(stackMatches []StackMatch, frames []runtime.Frame) (str
 			neither = append(neither, sm)
 		}
 	}
-
 	groups := [][]StackMatch{both, afterOnly, fromOnly, neither}
+
 	for _, group := range groups {
 		if len(group) == 0 {
 			continue
 		}
-		// Try to match in this group
-		for _, frame := range frames {
+		// For each group, walk the frames with correct previousFunc tracking
+		for i, frame := range frames {
+			var previousFunc string
+			if i+1 < len(frames) {
+				previousFunc = frames[i+1].Function
+			}
 			for _, match := range group {
-				// Match CalledFrom if specified
 				if match.CalledFrom != "" {
 					matched, err := regexp.MatchString(match.CalledFrom, frame.Function)
 					if err != nil {
@@ -421,7 +422,6 @@ func processStackMatches(stackMatches []StackMatch, frames []runtime.Frame) (str
 						continue
 					}
 				}
-				// Match CalledAfter if specified
 				if match.CalledAfter != "" {
 					matched, err := regexp.MatchString(match.CalledAfter, previousFunc)
 					if err != nil {
@@ -431,14 +431,10 @@ func processStackMatches(stackMatches []StackMatch, frames []runtime.Frame) (str
 						continue
 					}
 				}
-				// If both conditions match (or are not specified), return the Display value
 				return match.Display, nil
 			}
-			// Update the previous function name for the next iteration
-			previousFunc = frame.Function
 		}
 	}
-	// No match found
 	return "", nil
 }
 
