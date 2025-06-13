@@ -22,7 +22,7 @@ type Runtime struct {
 	Diags  diag.Diagnostics
 }
 
-func NewRuntime(cfg *Config, err error, _ interface{}, kv ...any) *Runtime {
+func NewRuntime(cfg *Config, err error, _ any, kv ...any) *Runtime {
 	// Parse key-value pairs
 	args := parseKeyvals(kv...)
 	// Emit debug output if config or error is nil
@@ -40,7 +40,7 @@ func NewRuntime(cfg *Config, err error, _ interface{}, kv ...any) *Runtime {
 }
 
 // NewRuntimeWithDiagnostics constructs a Runtime and allows for diagnostics collection (future-proof for error collection).
-func NewRuntimeWithDiagnostics(cfg *Config, err error, _ interface{}, diagnostics *[]error, kv ...any) *Runtime {
+func NewRuntimeWithDiagnostics(cfg *Config, err error, _ any, diagnostics *[]error, kv ...any) *Runtime {
 	// For now, just call NewRuntime. In the future, collect errors here if needed.
 	return NewRuntime(cfg, err, nil, kv...)
 }

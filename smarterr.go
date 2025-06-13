@@ -159,7 +159,7 @@ func collectRelStackPaths(baseDir string) []string {
 	n := runtime.Callers(2, pcs)
 	frames := runtime.CallersFrames(pcs[:n])
 	var relStackPaths []string
-	for i := 0; i < n; i++ {
+	for i := range n {
 		frame, more := frames.Next()
 		if frame.File != "" && baseDir != "" {
 			idx := indexOf(frame.File, baseDir+"/")
