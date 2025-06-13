@@ -102,6 +102,7 @@ func AppendSDK(ctx context.Context, diags sdkdiag.Diagnostics, err error, keyval
 // The add function is used to append the error to the diagnostics in a way appropriate for the caller.
 func appendCommon(ctx context.Context, add func(summary, detail string), err error, keyvals ...any) {
 	Debugf("appendCommon called with error: %v, keyvals: %v", err, keyvals)
+	var diagnostics []error
 	if wrappedFS == nil {
 		Debugf("No wrappedFS set; calling addFallbackInitError")
 		addFallbackInitError(add, err)
@@ -110,17 +111,17 @@ func appendCommon(ctx context.Context, add func(summary, detail string), err err
 
 	relStackPaths := collectRelStackPaths(wrappedBaseDir)
 	Debugf("collectRelStackPaths returned: %v", relStackPaths)
-	cfg, cfgErr := internal.LoadConfig(wrappedFS, relStackPaths, wrappedBaseDir)
+	cfg, cfgErr := internal.LoadConfigWithDiagnostics(wrappedFS, relStackPaths, wrappedBaseDir, &diagnostics)
 	if cfgErr != nil {
 		Debugf("Config load error: %v", cfgErr)
 		addFallbackConfigError(add, err, cfgErr)
 		return
 	}
 
-	rt := internal.NewRuntime(cfg, err, nil, keyvals...)
+	rt := internal.NewRuntimeWithDiagnostics(cfg, err, nil, &diagnostics, keyvals...)
 	values := rt.BuildTokenValueMap(ctx)
 
-	summary, detail := renderDiagnostics(cfg, err, values)
+	summary, detail := renderDiagnosticsWithDiagnostics(cfg, err, values, &diagnostics)
 	Debugf("renderDiagnostics returned summary=%q detail=%q", summary, detail)
 	add(summary, detail)
 	emitLogTemplates(ctx, cfg, values)
@@ -176,12 +177,13 @@ func collectRelStackPaths(baseDir string) []string {
 }
 
 // renderDiagnostics renders summary and detail, with fallback if templates fail.
-func renderDiagnostics(cfg *internal.Config, err error, values map[string]any) (string, string) {
+func renderDiagnosticsWithDiagnostics(cfg *internal.Config, err error, values map[string]any, diagnostics *[]error) (string, string) {
 	Debugf("renderDiagnostics called with error: %v, values: %v", err, values)
 	summaryTmpl, summaryErr := cfg.RenderTemplate("error_summary", values)
 	var summary string
 	if summaryErr != nil {
 		Debugf("Summary template error: %v", summaryErr)
+		*diagnostics = append(*diagnostics, summaryErr)
 		summary = firstNWords(err, 3)
 	} else {
 		summary = summaryTmpl
@@ -190,6 +192,9 @@ func renderDiagnostics(cfg *internal.Config, err error, values map[string]any) (
 	var detail string
 	if detailErr != nil || summaryErr != nil {
 		Debugf("Detail template error: %v", detailErr)
+		if detailErr != nil {
+			*diagnostics = append(*diagnostics, detailErr)
+		}
 		detail = ""
 		if err != nil {
 			detail = err.Error()
@@ -202,9 +207,17 @@ func renderDiagnostics(cfg *internal.Config, err error, values map[string]any) (
 			problems += " [smarterr detail template error: " + detailErr.Error() + "]"
 		}
 		detail += problems
-		return summary, detail
+	} else {
+		detail = detailTmpl
 	}
-	detail = detailTmpl
+	// Append diagnostics if present
+	if diagnostics != nil && len(*diagnostics) > 0 {
+		detail += "\n\n[smarterr diagnostics]"
+		for _, diag := range *diagnostics {
+			Debugf("[smarterr diagnostics] %v", diag)
+			detail += "\n- " + diag.Error()
+		}
+	}
 	return summary, detail
 }
 

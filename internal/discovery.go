@@ -20,6 +20,17 @@ func LoadConfig(fsys FileSystem, relStackPaths []string, baseDir string) (*Confi
 	return loadConfigMultiStack(fsys, relStackPaths, baseDir)
 }
 
+// LoadConfigWithDiagnostics loads and merges configuration files from a filesystem, collecting diagnostics.
+func LoadConfigWithDiagnostics(fsys FileSystem, relStackPaths []string, baseDir string, diagnostics *[]error) (*Config, error) {
+	cfg, err := LoadConfig(fsys, relStackPaths, baseDir)
+	if err != nil {
+		if diagnostics != nil {
+			*diagnostics = append(*diagnostics, err)
+		}
+	}
+	return cfg, err
+}
+
 // loadConfigMultiStack is the internal implementation for loading and merging config files
 // based on multiple stack paths. This is optimized for embedded FS, but can be adapted for
 // real FS in the future.

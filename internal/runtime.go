@@ -39,6 +39,12 @@ func NewRuntime(cfg *Config, err error, _ interface{}, kv ...any) *Runtime {
 	}
 }
 
+// NewRuntimeWithDiagnostics constructs a Runtime and allows for diagnostics collection (future-proof for error collection).
+func NewRuntimeWithDiagnostics(cfg *Config, err error, _ interface{}, diagnostics *[]error, kv ...any) *Runtime {
+	// For now, just call NewRuntime. In the future, collect errors here if needed.
+	return NewRuntime(cfg, err, nil, kv...)
+}
+
 // applyTransforms applies named transforms (from config) to a value, in order.
 func (rt *Runtime) applyTransforms(token *Token, value string) string {
 	if len(token.Transforms) == 0 || rt.Config == nil {
@@ -291,49 +297,8 @@ func (t *Token) Resolve(ctx context.Context, rt *Runtime) string {
 	case "hints":
 		Debugf("Resolving hints token: %s", t.Name)
 		if rt.Error != nil {
-			errStr := rt.Error.Error()
-			var suggestions []string
-			matchMode := "all"
-			joinChar := "\n"
-			if rt.Config.Smarterr != nil {
-				if rt.Config.Smarterr.HintMatchMode != nil && *rt.Config.Smarterr.HintMatchMode != "" {
-					matchMode = *rt.Config.Smarterr.HintMatchMode
-				}
-				if rt.Config.Smarterr.HintJoinChar != nil {
-					joinChar = *rt.Config.Smarterr.HintJoinChar
-				}
-			}
-			for _, hint := range rt.Config.Hints {
-				Debugf("Checking hint %q against error: %s", hint.Name, errStr)
-				matched := true
-				if hint.ErrorContains != nil && *hint.ErrorContains != "" {
-					if !strings.Contains(errStr, *hint.ErrorContains) {
-						Debugf("Hint %q did not match error_contains: %s", hint.Name, *hint.ErrorContains)
-						matched = false
-					} else {
-						Debugf("Hint %q matched error_contains: %s", hint.Name, *hint.ErrorContains)
-					}
-				}
-				if hint.RegexMatch != nil && *hint.RegexMatch != "" {
-					re, err := regexp.Compile(*hint.RegexMatch)
-					if err != nil || !re.MatchString(errStr) {
-						Debugf("Hint %q did not match regex: %s", hint.Name, *hint.RegexMatch)
-						matched = false
-					} else {
-						Debugf("Hint %q matched regex: %s", hint.Name, *hint.RegexMatch)
-					}
-				}
-				if matched {
-					suggestions = append(suggestions, hint.Suggestion)
-					if matchMode == "first" {
-						break
-					}
-				}
-				if matchMode == "first" && len(suggestions) > 0 {
-					break
-				}
-			}
-			value = strings.Join(suggestions, joinChar)
+			// If diagnostics aggregation is ever enabled, pass it here (nil for now)
+			value = resolveHints(rt.Error.Error(), rt.Config, nil)
 		}
 		if value == "" {
 			value = fallbackMessage(rt.Config, t.Name)
@@ -578,4 +543,56 @@ func fallbackMessage(cfg *Config, tokenName string) string {
 	default:
 		return ""
 	}
+}
+
+// resolveHints processes hint suggestions for an error string, returning joined suggestions and diagnostics.
+func resolveHints(errStr string, cfg *Config, diagnostics *[]error) string {
+	var suggestions []string
+	matchMode := "all"
+	joinChar := "\n"
+	if cfg.Smarterr != nil {
+		if cfg.Smarterr.HintMatchMode != nil && *cfg.Smarterr.HintMatchMode != "" {
+			matchMode = *cfg.Smarterr.HintMatchMode
+		}
+		if cfg.Smarterr.HintJoinChar != nil {
+			joinChar = *cfg.Smarterr.HintJoinChar
+		}
+	}
+	for _, hint := range cfg.Hints {
+		Debugf("Checking hint %q against error: %s", hint.Name, errStr)
+		matched := true
+		if hint.ErrorContains != nil && *hint.ErrorContains != "" {
+			if !strings.Contains(errStr, *hint.ErrorContains) {
+				Debugf("Hint %q did not match error_contains: %s", hint.Name, *hint.ErrorContains)
+				matched = false
+			} else {
+				Debugf("Hint %q matched error_contains: %s", hint.Name, *hint.ErrorContains)
+			}
+		}
+		if hint.RegexMatch != nil && *hint.RegexMatch != "" {
+			re, err := regexp.Compile(*hint.RegexMatch)
+			if err != nil {
+				Debugf("Hint %q regex compile error: %v", hint.Name, err)
+				if diagnostics != nil {
+					*diagnostics = append(*diagnostics, fmt.Errorf("hint %q regex compile error: %w", hint.Name, err))
+				}
+				matched = false
+			} else if !re.MatchString(errStr) {
+				Debugf("Hint %q did not match regex: %s", hint.Name, *hint.RegexMatch)
+				matched = false
+			} else {
+				Debugf("Hint %q matched regex: %s", hint.Name, *hint.RegexMatch)
+			}
+		}
+		if matched {
+			suggestions = append(suggestions, hint.Suggestion)
+			if matchMode == "first" {
+				break
+			}
+		}
+		if matchMode == "first" && len(suggestions) > 0 {
+			break
+		}
+	}
+	return strings.Join(suggestions, joinChar)
 }
