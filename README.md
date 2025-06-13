@@ -1,20 +1,40 @@
 # smarterr
 
+**Declarative, layered, and maintainable error messages for Go.**
+
 With a single line of code:
 
 ```go
 return smarterr.AppendSDK(ctx, diags, err, "id", "r-1234567890")
 ```
 
-smarterr uses declarative configuration and pulls information from `context.Context`, the call stack (to determine "creating"), a static parameter in the config, and an argument to the `AppendSDK()` call, resulting in this pretty output:
+smarterr uses configuration—not code changes—to split an incoming error into **three output channels**:
 
-```
-creating CloudWatch Composite Alarm (r-1234567890): operation error CloudWatch: ModifyServerlessCache
-```
+1. **Error summary** (for users)
+
+   ```
+   creating CloudWatch Composite Alarm
+   ```
+
+2. **Error detail with a suggested fix** (for users)
+
+   ```
+   ID: r-1234567890
+   Cause: operation error CloudWatch: ModifyServerlessCache
+   If you are trying to modify a serverless cache, please use the
+   `aws_cloudwatch_serverless_cache` resource instead of
+   `aws_cloudwatch_log_group`.
+   ```
+
+3. **Log** ([`tflog`](https://pkg.go.dev/github.com/hashicorp/terraform-plugin-log/tflog) or Go log)
+
+   ```
+   creating CloudWatch Composite Alarm (ID r-1234567890): operation error CloudWatch: ModifyServerlessCache, https response error StatusCode: 400, RequestID: 9c9c8b2c-d71b-4717-b62a-68cfa4b18aa9, InvalidParameterCombination: No
+   ```
 
 ---
 
-**smarterr** is a novel Go library and CLI for declarative, layered, and maintainable error message formatting. It lets you define how errors are rendered—across thousands of call sites—using configuration, not code changes. This means you can update, standardize, and improve error messages for both developers and users without refactoring your codebase.
+**smarterr** lets you define, update, and standardize error output for thousands of call sites—using config, not code. Evolve your error messages and formatting without cross-codebase refactors. Both developers and users get cleaner, more actionable diagnostics.
 
 ## Why smarterr?
 
@@ -37,22 +57,37 @@ creating CloudWatch Composite Alarm (r-1234567890): operation error CloudWatch: 
 
 1. **Embed your config:**
 
-```go
-//go:embed **/smarterr.hcl
-var smarterrFiles embed.FS
+  ```go
+  //go:embed service/smarterr.hcl
+  //go:embed service/*/smarterr.hcl
+  var SmarterrFS embed.FS
 
-smarterr.SetFS(&smarterr.EmbeddedFS{FS: smarterrFiles}, "dir/where/goembed/is/called/such/as/internal")
-```
+  var smarterrInitOnce sync.Once
+
+  func init() {
+    smarterrInitOnce.Do(func() {
+      smarterr.SetLogger(smarterr.TFLogLogger{})
+      smarterr.SetFS(&smarterr.WrappedFS{FS: &SmarterrFS}, "dir/where/files/are/embedded/such/as/internal")
+    })
+  }
+  ```
 
 2. **Call smarterr in your error handling:**
 
-```go
-smarterr.AppendFW(ctx, diags, err, "id", id)
-// or for SDK diagnostics:
-diags = smarterr.AppendSDK(ctx, diags, err, "id", id)
-```
+   ```go
+   smarterr.AppendFW(ctx, diags, err, "id", id)
+   // or for SDK diagnostics:
+   diags = smarterr.AppendSDK(ctx, diags, err, "id", id)
+   ```
 
-### CLI Usage
+### CLI Usage (Work in Progress)
+
+> **Note:** The smarterr CLI is under development and not yet available for use.
+> When released, it will:
+> - Output the effective merged configuration for any directory (after all layering/merging).
+> - Validate all discovered configuration files for errors, missing fields, or schema issues.
+
+Planned usage:
 
 ```sh
 smarterr config --base-dir /path/to/project --start-dir /path/to/project/internal/service
@@ -63,9 +98,10 @@ smarterr validate --base-dir /path/to/project --start-dir /path/to/project/inter
 
 ## Example Configuration
 
-Here’s a sample `smarterr.hcl` for a Terraform provider:
+Here’s a sample `smarterr.hcl` for a Terraform provider. For details, see the [full config schema](docs/schema.md).
 
 ```hcl
+# 
 template "error_summary" {
   format = "{{.happening}} {{.service}} {{.resource}} ({{.identifier}}): {{.error}}"
 }
@@ -123,53 +159,13 @@ transform "clean_aws_error" {
 
 ---
 
-## Example: Layered Configs (Parent and Subdirectory)
+## Learn More
 
-smarterr supports layered configuration. For example, you can have a parent config:
-
-```hcl
-# project/smarterr.hcl
-token "service" {
-  parameter = "service"
-}
-
-parameter "service" {
-  value = "Default"
-}
-```
-
-And in a subdirectory, you can add or override config:
-
-```hcl
-# project/subdir/smarterr.hcl
-# This config can add tokens, templates, or override parameters from the parent
-# For example, it can override the parent 'service' parameter automatically.
-parameter "service" {
-  value = "CloudWatch"
-}
-```
-
-When smarterr loads config for a file in `subdir`, it merges both configs, so the `service` parameter will be used in the token (and template) inherited from the parent.
-
----
-
-## Embedded vs. Real Filesystem
-
-- **Embedded FS (recommended for libraries/plugins):**
-  - Use Go’s `embed.FS` to bundle all your `smarterr.hcl` files.
-  - Pass an embedded FS to `smarterr.SetFS()`.
-- **Real FS (for CLI/debugging):**
-  - Use `os.DirFS` and pass it to `smarterr.SetFS()` or use the CLI directly.
-  - The CLI will walk up from `--start-dir` to `--base-dir` to discover configs.
-
----
-
-## How AppendFW/AppendSDK Work
-
-- `AppendFW(ctx, diags, err, ...)` — For Terraform Plugin Framework diagnostics.
-- `AppendSDK(ctx, diags, err, ...)` — For Terraform Plugin SDK diagnostics.
-- Both use the current call stack, context, and config to render a user-facing error message and add it to diagnostics.
-- If config or rendering fails, smarterr always falls back to a safe, raw error message—never panicking or hiding the original error.
+- [Full Config Schema](docs/schema.md)
+- [Layered Configs & Merging](docs/layering.md)
+- [Diagnostics & Fallbacks](docs/diagnostics.md)
+- [API Reference](docs/api.md)
+- [FAQ](#faq)
 
 ---
 
@@ -183,3 +179,5 @@ A: Yes! Just update your config and re-embed.
 
 **Q: What if config is missing or broken?**  
 A: smarterr falls back to the original error, never panics, and logs the issue if debug is enabled.
+
+For more, see the [Diagnostics & Fallbacks](docs/diagnostics.md) doc.

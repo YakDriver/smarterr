@@ -10,6 +10,25 @@ const (
 	ConfigFileName = "smarterr.hcl"
 )
 
+// Config represents the top-level configuration for smarterr.
+type Config struct {
+	Smarterr     *Smarterr    `hcl:"smarterr,block"`
+	Tokens       []Token      `hcl:"token,block"`
+	Hints        []Hint       `hcl:"hint,block"`
+	Parameters   []Parameter  `hcl:"parameter,block"`
+	StackMatches []StackMatch `hcl:"stack_match,block"`
+	Templates    []Template   `hcl:"template,block"`
+	Transforms   []Transform  `hcl:"transform,block"`
+}
+
+// Smarterr represents settings for how smarterr works such as debugging, token error mode, etc.
+type Smarterr struct {
+	Debug          bool    `hcl:"debug,optional"`
+	TokenErrorMode string  `hcl:"token_error_mode,optional"` // "detailed", "placeholder", "empty" (default: "empty")
+	HintJoinChar   *string `hcl:"hint_join_char,optional"`
+	HintMatchMode  *string `hcl:"hint_match_mode,optional"` // "all" (default), "first"
+}
+
 // Template represents a named text/template for formatting error messages or diagnostics.
 type Template struct {
 	Name   string `hcl:"name,label"`
@@ -29,18 +48,7 @@ type Transform struct {
 	Steps []TransformStep `hcl:"step,block"`
 }
 
-type Config struct {
-	LogOutput    string       `hcl:"log_output,optional"`
-	LogLevel     string       `hcl:"log_level,optional"`
-	Fallback     string       `hcl:"fallback,optional"`
-	Tokens       []Token      `hcl:"token,block"`
-	Hints        []Hint       `hcl:"hint,block"`
-	Parameters   []Parameter  `hcl:"parameter,block"`
-	StackMatches []StackMatch `hcl:"stack_match,block"`
-	Templates    []Template   `hcl:"template,block"`
-	Transforms   []Transform  `hcl:"transform,block"`
-}
-
+// Token represents a token in the configuration, which can be used for error message formatting.
 type Token struct {
 	Name         string   `hcl:"name,label"`
 	Source       string   `hcl:"source,optional"`
@@ -59,9 +67,10 @@ type Parameter struct {
 }
 
 type Hint struct {
-	Name       string            `hcl:"name,label"`
-	Match      map[string]string `hcl:"match"`
-	Suggestion string            `hcl:"suggestion"`
+	Name          string  `hcl:"name,label"`
+	ErrorContains *string `hcl:"error_contains,optional"`
+	RegexMatch    *string `hcl:"regex_match,optional"`
+	Suggestion    string  `hcl:"suggestion"`
 }
 
 type StackMatch struct {

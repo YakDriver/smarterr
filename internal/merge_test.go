@@ -91,15 +91,16 @@ func TestMergeConfigs(t *testing.T) {
 			description: "Should overwrite by name for all blocks",
 		},
 		{
-			name:        "Merge LogOutput, LogLevel, and Fallback",
-			base:        Config{LogOutput: "stdout", LogLevel: "info", Fallback: "basic"},
-			add:         Config{LogOutput: "stderr", LogLevel: "debug", Fallback: "detailed"},
-			expected:    Config{LogOutput: "stderr", LogLevel: "debug", Fallback: "detailed"},
-			description: "Should overwrite LogOutput, LogLevel, and Fallback",
+			name:        "Merge Smarterr debug and token_error_mode",
+			base:        Config{Smarterr: &Smarterr{Debug: false, TokenErrorMode: "detailed"}},
+			add:         Config{Smarterr: &Smarterr{Debug: true, TokenErrorMode: "placeholder"}},
+			expected:    Config{Smarterr: &Smarterr{Debug: true, TokenErrorMode: "placeholder"}},
+			description: "Should overwrite Smarterr debug and token_error_mode",
 		},
 		{
 			name: "No changes when add is empty",
 			base: Config{
+				Smarterr:     &Smarterr{Debug: true, TokenErrorMode: "detailed"},
 				Tokens:       []Token{{Name: "token1", Source: "base"}},
 				Hints:        []Hint{{Name: "hint1", Suggestion: "base"}},
 				Parameters:   []Parameter{{Name: "param1", Value: "base"}},
@@ -109,6 +110,7 @@ func TestMergeConfigs(t *testing.T) {
 			},
 			add: Config{},
 			expected: Config{
+				Smarterr:     &Smarterr{Debug: true, TokenErrorMode: "detailed"},
 				Tokens:       []Token{{Name: "token1", Source: "base"}},
 				Hints:        []Hint{{Name: "hint1", Suggestion: "base"}},
 				Parameters:   []Parameter{{Name: "param1", Value: "base"}},
@@ -116,7 +118,7 @@ func TestMergeConfigs(t *testing.T) {
 				Templates:    []Template{{Name: "tmpl1", Format: "base"}},
 				Transforms:   []Transform{{Name: "tr1", Steps: []TransformStep{{Type: "upper"}}}},
 			},
-			description: "Should make no changes when add is empty",
+			description: "Should not change base config when add is empty",
 		},
 	}
 

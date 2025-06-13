@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/YakDriver/smarterr/filesystem"
+	"github.com/YakDriver/smarterr"
 	"github.com/YakDriver/smarterr/internal"
 	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/spf13/cobra"
@@ -38,7 +38,7 @@ at the specified directory path. It helps debug layered config resolution.`,
 		fmt.Printf("Loading configuration...\nStart dir: %s\nBase dir: %s\n", startDir, baseDir)
 
 		// Create FileSystem rooted at baseDir
-		fsys := filesystem.NewWrappedFS(baseDir)
+		fsys := smarterr.NewWrappedFS(baseDir)
 
 		// Compute paths relative to baseDir
 		relStartDir, err := filepath.Rel(baseDir, startDir)
@@ -46,8 +46,8 @@ at the specified directory path. It helps debug layered config resolution.`,
 			return fmt.Errorf("failed to relativize startDir: %w", err)
 		}
 
-		// Load config
-		cfg, err := internal.LoadConfig(fsys, relStartDir, ".")
+		// Load config (pass relStackPaths as []string)
+		cfg, err := internal.LoadConfig(fsys, []string{relStartDir}, ".")
 		if err != nil {
 			return fmt.Errorf("failed to load config: %w", err)
 		}
@@ -77,24 +77,23 @@ func convertConfigToHCL(cfg *internal.Config) ([]byte, error) {
 	file := hclwrite.NewEmptyFile()
 	body := file.Body()
 
-	// Top-level attributes
-	if cfg.LogOutput != "" {
-		body.SetAttributeValue("log_output", cty.StringVal(cfg.LogOutput))
-	}
-	if cfg.LogLevel != "" {
-		body.SetAttributeValue("log_level", cty.StringVal(cfg.LogLevel))
-	}
-	if cfg.Fallback != "" {
-		body.SetAttributeValue("fallback", cty.StringVal(cfg.Fallback))
+	// Smarterr block (debug, token_error_mode)
+	if cfg.Smarterr.Debug || cfg.Smarterr.TokenErrorMode != "" {
+		smarterrBlock := body.AppendNewBlock("smarterr", nil)
+		b := smarterrBlock.Body()
+		if cfg.Smarterr.Debug {
+			b.SetAttributeValue("debug", cty.BoolVal(true))
+		}
+		if cfg.Smarterr.TokenErrorMode != "" {
+			b.SetAttributeValue("token_error_mode", cty.StringVal(cfg.Smarterr.TokenErrorMode))
+		}
 	}
 
 	// Tokens
 	for _, token := range cfg.Tokens {
 		block := body.AppendNewBlock("token", []string{token.Name})
 		b := block.Body()
-		b.SetAttributeValue("position", cty.NumberIntVal(int64(token.Position)))
 		b.SetAttributeValue("source", cty.StringVal(token.Source))
-
 		if token.Parameter != nil {
 			b.SetAttributeValue("parameter", cty.StringVal(*token.Parameter))
 		}
@@ -104,21 +103,18 @@ func convertConfigToHCL(cfg *internal.Config) ([]byte, error) {
 		if token.Context != nil {
 			b.SetAttributeValue("context", cty.StringVal(*token.Context))
 		}
-		if token.Error != nil {
-			b.SetAttributeValue("error", cty.StringVal(*token.Error))
-		}
 		if token.Pattern != nil {
 			b.SetAttributeValue("pattern", cty.StringVal(*token.Pattern))
 		}
 		if token.Replace != nil {
 			b.SetAttributeValue("replace", cty.StringVal(*token.Replace))
 		}
-		if len(token.Transform) > 0 {
-			vals := make([]cty.Value, len(token.Transform))
-			for i, v := range token.Transform {
+		if len(token.Transforms) > 0 {
+			vals := make([]cty.Value, len(token.Transforms))
+			for i, v := range token.Transforms {
 				vals[i] = cty.StringVal(v)
 			}
-			b.SetAttributeValue("transform", cty.ListVal(vals))
+			b.SetAttributeValue("transforms", cty.ListVal(vals))
 		}
 		if len(token.StackMatches) > 0 {
 			vals := make([]cty.Value, len(token.StackMatches))
@@ -139,13 +135,12 @@ func convertConfigToHCL(cfg *internal.Config) ([]byte, error) {
 	for _, hint := range cfg.Hints {
 		block := body.AppendNewBlock("hint", []string{hint.Name})
 		b := block.Body()
-
-		// Convert hint.match map to object
-		matchAttrs := make(map[string]cty.Value, len(hint.Match))
-		for k, v := range hint.Match {
-			matchAttrs[k] = cty.StringVal(v)
+		if hint.ErrorContains != nil {
+			b.SetAttributeValue("error_contains", cty.StringVal(*hint.ErrorContains))
 		}
-		b.SetAttributeValue("match", cty.ObjectVal(matchAttrs))
+		if hint.RegexMatch != nil {
+			b.SetAttributeValue("regex_match", cty.StringVal(*hint.RegexMatch))
+		}
 		b.SetAttributeValue("suggestion", cty.StringVal(hint.Suggestion))
 	}
 
@@ -160,6 +155,33 @@ func convertConfigToHCL(cfg *internal.Config) ([]byte, error) {
 			b.SetAttributeValue("called_after", cty.StringVal(sm.CalledAfter))
 		}
 		b.SetAttributeValue("display", cty.StringVal(sm.Display))
+	}
+
+	// Templates
+	for _, tmpl := range cfg.Templates {
+		block := body.AppendNewBlock("template", []string{tmpl.Name})
+		block.Body().SetAttributeValue("format", cty.StringVal(tmpl.Format))
+	}
+
+	// Transforms
+	for _, tr := range cfg.Transforms {
+		block := body.AppendNewBlock("transform", []string{tr.Name})
+		for _, step := range tr.Steps {
+			stepBlock := block.Body().AppendNewBlock("step", []string{step.Type})
+			b := stepBlock.Body()
+			if step.Value != nil {
+				b.SetAttributeValue("value", cty.StringVal(*step.Value))
+			}
+			if step.Regex != nil {
+				b.SetAttributeValue("regex", cty.StringVal(*step.Regex))
+			}
+			if step.With != nil {
+				b.SetAttributeValue("with", cty.StringVal(*step.With))
+			}
+			if step.Recurse != nil {
+				b.SetAttributeValue("recurse", cty.BoolVal(*step.Recurse))
+			}
+		}
 	}
 
 	return file.Bytes(), nil

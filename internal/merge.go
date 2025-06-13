@@ -16,110 +16,80 @@ func mergeConfigs(configs []*Config) *Config {
 
 // mergeConfigsPair merges two Config objects: add takes precedence over base.
 //
-// 1. LogOutput, LogLevel, and Fallback are overwritten by add if set.
-// 2. Tokens are merged by name.
-// 3. Hints, Parameters, StackMatches, Templates, and Transforms are merged by name.
+// - Smarterr (debug, token_error_mode) is overwritten by add if set.
+// - Tokens, Hints, Parameters, StackMatches, Templates, and Transforms are merged by name (add replaces base).
 func mergeConfigsPair(base *Config, add *Config) {
-	// Overwrite LogOutput, LogLevel, and Fallback if set in add
-	if add.LogOutput != "" {
-		base.LogOutput = add.LogOutput
-	}
-	if add.LogLevel != "" {
-		base.LogLevel = add.LogLevel
-	}
-	if add.Fallback != "" {
-		base.Fallback = add.Fallback
+	// Overwrite Smarterr fields if set in add
+	if add.Smarterr != nil {
+		if base.Smarterr == nil {
+			base.Smarterr = &Smarterr{}
+		}
+		if add.Smarterr.Debug {
+			base.Smarterr.Debug = true
+		}
+		if add.Smarterr.TokenErrorMode != "" {
+			base.Smarterr.TokenErrorMode = add.Smarterr.TokenErrorMode
+		}
 	}
 
-	// Merge tokens: replace by name only (positions removed)
-	nameMap := map[string]int{} // Map name to index in base.Tokens
-
-	// Build map for existing tokens in base
+	// Merge tokens by name (add replaces base)
+	tokenMap := make(map[string]int)
 	for i, t := range base.Tokens {
-		nameMap[t.Name] = i
+		tokenMap[t.Name] = i
 	}
-
-	// Add or replace tokens from add
 	for _, t := range add.Tokens {
-		if i, ok := nameMap[t.Name]; ok {
-			// Overwrite token with the same name
+		if i, ok := tokenMap[t.Name]; ok {
 			base.Tokens[i] = t
 		} else {
-			// Add new token
 			base.Tokens = append(base.Tokens, t)
 		}
-		// Update map to reflect the new token
-		nameMap[t.Name] = len(base.Tokens) - 1
+		tokenMap[t.Name] = len(base.Tokens) - 1
 	}
 
-	// Merge hints: replace by name
-	hintMap := map[string]int{} // Map name to index in base.Hints
-
-	// Build map for existing hints in base
+	// Merge hints by name (add replaces base)
+	hintMap := make(map[string]int)
 	for i, h := range base.Hints {
 		hintMap[h.Name] = i
 	}
-
-	// Add or replace hints from add
 	for _, h := range add.Hints {
 		if i, ok := hintMap[h.Name]; ok {
-			// Overwrite hint with the same name
 			base.Hints[i] = h
 		} else {
-			// Add new hint
 			base.Hints = append(base.Hints, h)
 		}
-
-		// Update map to reflect the new hint
 		hintMap[h.Name] = len(base.Hints) - 1
 	}
 
-	// Merge parameters: replace by name
-	parameterMap := map[string]int{} // Map name to index in base.Parameters
-
-	// Build map for existing parameters in base
+	// Merge parameters by name (add replaces base)
+	paramMap := make(map[string]int)
 	for i, p := range base.Parameters {
-		parameterMap[p.Name] = i
+		paramMap[p.Name] = i
 	}
-
-	// Add or replace parameters from add
 	for _, p := range add.Parameters {
-		if i, ok := parameterMap[p.Name]; ok {
-			// Overwrite parameter with the same name
+		if i, ok := paramMap[p.Name]; ok {
 			base.Parameters[i] = p
 		} else {
-			// Add new parameter
 			base.Parameters = append(base.Parameters, p)
 		}
-
-		// Update map to reflect the new parameter
-		parameterMap[p.Name] = len(base.Parameters) - 1
+		paramMap[p.Name] = len(base.Parameters) - 1
 	}
 
-	// Merge stack matches: replace by name
-	stackMatchMap := map[string]int{} // Map name to index in base.StackMatches
-
-	// Build map for existing stack matches in base
+	// Merge stack matches by name (add replaces base)
+	stackMatchMap := make(map[string]int)
 	for i, sm := range base.StackMatches {
 		stackMatchMap[sm.Name] = i
 	}
-
-	// Add or replace stack matches from add
 	for _, sm := range add.StackMatches {
 		if i, ok := stackMatchMap[sm.Name]; ok {
-			// Overwrite stack match with the same name
 			base.StackMatches[i] = sm
 		} else {
-			// Add new stack match
 			base.StackMatches = append(base.StackMatches, sm)
 		}
-
-		// Update map to reflect the new stack match
 		stackMatchMap[sm.Name] = len(base.StackMatches) - 1
 	}
 
-	// Merge templates: replace by name
-	tmplMap := map[string]int{} // Map name to index in base.Templates
+	// Merge templates by name (add replaces base)
+	tmplMap := make(map[string]int)
 	for i, tmpl := range base.Templates {
 		tmplMap[tmpl.Name] = i
 	}
@@ -132,8 +102,8 @@ func mergeConfigsPair(base *Config, add *Config) {
 		tmplMap[tmpl.Name] = len(base.Templates) - 1
 	}
 
-	// Merge transforms: replace by name
-	trMap := map[string]int{} // Map name to index in base.Transforms
+	// Merge transforms by name (add replaces base)
+	trMap := make(map[string]int)
 	for i, tr := range base.Transforms {
 		trMap[tr.Name] = i
 	}
