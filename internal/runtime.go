@@ -386,40 +386,58 @@ func gatherCallStack(skip int) ([]runtime.Frame, error) {
 func processStackMatches(stackMatches []StackMatch, frames []runtime.Frame) (string, error) {
 	var previousFunc string
 
-	// Iterate through the stack frames
-	for _, frame := range frames {
-		// Check each StackMatch rule
-		for _, match := range stackMatches {
-			// Match CalledFrom if specified
-			if match.CalledFrom != "" {
-				matched, err := regexp.MatchString(match.CalledFrom, frame.Function)
-				if err != nil {
-					return "", fmt.Errorf("invalid regex in CalledFrom for StackMatch %q: %w", match.Name, err)
-				}
-				if !matched {
-					continue
-				}
-			}
-
-			// Match CalledAfter if specified
-			if match.CalledAfter != "" {
-				matched, err := regexp.MatchString(match.CalledAfter, previousFunc)
-				if err != nil {
-					return "", fmt.Errorf("invalid regex in CalledAfter for StackMatch %q: %w", match.Name, err)
-				}
-				if !matched {
-					continue
-				}
-			}
-
-			// If both conditions match (or are not specified), return the Display value
-			return match.Display, nil
+	// Partition stackMatches by specificity
+	var both, afterOnly, fromOnly, neither []StackMatch
+	for _, sm := range stackMatches {
+		hasFrom := sm.CalledFrom != ""
+		hasAfter := sm.CalledAfter != ""
+		switch {
+		case hasFrom && hasAfter:
+			both = append(both, sm)
+		case hasAfter:
+			afterOnly = append(afterOnly, sm)
+		case hasFrom:
+			fromOnly = append(fromOnly, sm)
+		default:
+			neither = append(neither, sm)
 		}
-
-		// Update the previous function name for the next iteration
-		previousFunc = frame.Function
 	}
 
+	groups := [][]StackMatch{both, afterOnly, fromOnly, neither}
+	for _, group := range groups {
+		if len(group) == 0 {
+			continue
+		}
+		// Try to match in this group
+		for _, frame := range frames {
+			for _, match := range group {
+				// Match CalledFrom if specified
+				if match.CalledFrom != "" {
+					matched, err := regexp.MatchString(match.CalledFrom, frame.Function)
+					if err != nil {
+						return "", fmt.Errorf("invalid regex in CalledFrom for StackMatch %q: %w", match.Name, err)
+					}
+					if !matched {
+						continue
+					}
+				}
+				// Match CalledAfter if specified
+				if match.CalledAfter != "" {
+					matched, err := regexp.MatchString(match.CalledAfter, previousFunc)
+					if err != nil {
+						return "", fmt.Errorf("invalid regex in CalledAfter for StackMatch %q: %w", match.Name, err)
+					}
+					if !matched {
+						continue
+					}
+				}
+				// If both conditions match (or are not specified), return the Display value
+				return match.Display, nil
+			}
+			// Update the previous function name for the next iteration
+			previousFunc = frame.Function
+		}
+	}
 	// No match found
 	return "", nil
 }
