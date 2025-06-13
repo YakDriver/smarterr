@@ -242,7 +242,7 @@ func TestConfig_RenderTemplate_BasicAndFallback(t *testing.T) {
 			Name:   "hello",
 			Format: "Hello, {{.name}}! Your id is {{.id}}.",
 		}},
-		TokenErrorMode: "placeholder",
+		Smarterr: &Smarterr{TokenErrorMode: "placeholder"},
 	}
 	values := map[string]any{"name": "Alice"} // id is missing
 	out, err := cfg.RenderTemplate("hello", values)

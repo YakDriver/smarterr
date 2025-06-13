@@ -16,15 +16,20 @@ func mergeConfigs(configs []*Config) *Config {
 
 // mergeConfigsPair merges two Config objects: add takes precedence over base.
 //
-// - SmarterrDebug and TokenErrorMode are overwritten by add if set.
+// - Smarterr (debug, token_error_mode) is overwritten by add if set.
 // - Tokens, Hints, Parameters, StackMatches, Templates, and Transforms are merged by name (add replaces base).
 func mergeConfigsPair(base *Config, add *Config) {
-	// Overwrite SmarterrDebug and TokenErrorMode if set in add
-	if add.SmarterrDebug != nil {
-		base.SmarterrDebug = add.SmarterrDebug
-	}
-	if add.TokenErrorMode != "" {
-		base.TokenErrorMode = add.TokenErrorMode
+	// Overwrite Smarterr fields if set in add
+	if add.Smarterr != nil {
+		if base.Smarterr == nil {
+			base.Smarterr = &Smarterr{}
+		}
+		if add.Smarterr.Debug {
+			base.Smarterr.Debug = true
+		}
+		if add.Smarterr.TokenErrorMode != "" {
+			base.Smarterr.TokenErrorMode = add.Smarterr.TokenErrorMode
+		}
 	}
 
 	// Merge tokens by name (add replaces base)

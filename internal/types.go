@@ -10,6 +10,23 @@ const (
 	ConfigFileName = "smarterr.hcl"
 )
 
+// Config represents the top-level configuration for smarterr.
+type Config struct {
+	Smarterr     *Smarterr    `hcl:"smarterr,block"`
+	Tokens       []Token      `hcl:"token,block"`
+	Hints        []Hint       `hcl:"hint,block"`
+	Parameters   []Parameter  `hcl:"parameter,block"`
+	StackMatches []StackMatch `hcl:"stack_match,block"`
+	Templates    []Template   `hcl:"template,block"`
+	Transforms   []Transform  `hcl:"transform,block"`
+}
+
+// Smarterr represents settings for how smarterr works such as debugging, token error mode, etc.
+type Smarterr struct {
+	Debug          bool   `hcl:"debug,optional"`
+	TokenErrorMode string `hcl:"token_error_mode,optional"` // "detailed", "placeholder", "empty" (default: "empty")
+}
+
 // Template represents a named text/template for formatting error messages or diagnostics.
 type Template struct {
 	Name   string `hcl:"name,label"`
@@ -29,22 +46,7 @@ type Transform struct {
 	Steps []TransformStep `hcl:"step,block"`
 }
 
-// SmarterrDebug configures internal smarterr debugging logs (not user-facing logs).
-type SmarterrDebug struct {
-	Output string `hcl:"output,optional"` // Output can be "stdout", "stderr", or a file path.
-}
-
-type Config struct {
-	SmarterrDebug  *SmarterrDebug `hcl:"smarterr_debug,block"`
-	TokenErrorMode string         `hcl:"token_error_mode,optional"` // 	"detailed", "placeholder", "empty" (default: "empty")
-	Tokens         []Token        `hcl:"token,block"`
-	Hints          []Hint         `hcl:"hint,block"`
-	Parameters     []Parameter    `hcl:"parameter,block"`
-	StackMatches   []StackMatch   `hcl:"stack_match,block"`
-	Templates      []Template     `hcl:"template,block"`
-	Transforms     []Transform    `hcl:"transform,block"`
-}
-
+// Token represents a token in the configuration, which can be used for error message formatting.
 type Token struct {
 	Name         string   `hcl:"name,label"`
 	Source       string   `hcl:"source,optional"`

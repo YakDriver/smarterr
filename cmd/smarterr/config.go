@@ -77,18 +77,23 @@ func convertConfigToHCL(cfg *internal.Config) ([]byte, error) {
 	file := hclwrite.NewEmptyFile()
 	body := file.Body()
 
-	// Top-level attributes
-	if cfg.TokenErrorMode != "" {
-		body.SetAttributeValue("token_error_mode", cty.StringVal(cfg.TokenErrorMode))
+	// Smarterr block (debug, token_error_mode)
+	if cfg.Smarterr.Debug || cfg.Smarterr.TokenErrorMode != "" {
+		smarterrBlock := body.AppendNewBlock("smarterr", nil)
+		b := smarterrBlock.Body()
+		if cfg.Smarterr.Debug {
+			b.SetAttributeValue("debug", cty.BoolVal(true))
+		}
+		if cfg.Smarterr.TokenErrorMode != "" {
+			b.SetAttributeValue("token_error_mode", cty.StringVal(cfg.Smarterr.TokenErrorMode))
+		}
 	}
 
 	// Tokens
 	for _, token := range cfg.Tokens {
 		block := body.AppendNewBlock("token", []string{token.Name})
 		b := block.Body()
-		// b.SetAttributeValue("position", cty.NumberIntVal(int64(token.Position))) // No Position field
 		b.SetAttributeValue("source", cty.StringVal(token.Source))
-
 		if token.Parameter != nil {
 			b.SetAttributeValue("parameter", cty.StringVal(*token.Parameter))
 		}
@@ -152,12 +157,30 @@ func convertConfigToHCL(cfg *internal.Config) ([]byte, error) {
 		b.SetAttributeValue("display", cty.StringVal(sm.Display))
 	}
 
-	// SmarterrDebug block
-	if cfg.SmarterrDebug != nil {
-		block := body.AppendNewBlock("smarterr_debug", nil)
-		b := block.Body()
-		if cfg.SmarterrDebug.Output != "" {
-			b.SetAttributeValue("output", cty.StringVal(cfg.SmarterrDebug.Output))
+	// Templates
+	for _, tmpl := range cfg.Templates {
+		block := body.AppendNewBlock("template", []string{tmpl.Name})
+		block.Body().SetAttributeValue("format", cty.StringVal(tmpl.Format))
+	}
+
+	// Transforms
+	for _, tr := range cfg.Transforms {
+		block := body.AppendNewBlock("transform", []string{tr.Name})
+		for _, step := range tr.Steps {
+			stepBlock := block.Body().AppendNewBlock("step", []string{step.Type})
+			b := stepBlock.Body()
+			if step.Value != nil {
+				b.SetAttributeValue("value", cty.StringVal(*step.Value))
+			}
+			if step.Regex != nil {
+				b.SetAttributeValue("regex", cty.StringVal(*step.Regex))
+			}
+			if step.With != nil {
+				b.SetAttributeValue("with", cty.StringVal(*step.With))
+			}
+			if step.Recurse != nil {
+				b.SetAttributeValue("recurse", cty.BoolVal(*step.Recurse))
+			}
 		}
 	}
 

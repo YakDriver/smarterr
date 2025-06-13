@@ -535,8 +535,8 @@ func walkNodes(node parse.Node, vars map[string]struct{}) {
 
 func fallbackMessage(cfg *Config, tokenName string) string {
 	mode := "empty"
-	if cfg != nil && cfg.TokenErrorMode != "" {
-		mode = cfg.TokenErrorMode
+	if cfg != nil && cfg.Smarterr != nil && cfg.Smarterr.TokenErrorMode != "" {
+		mode = cfg.Smarterr.TokenErrorMode
 	}
 	switch mode {
 	case "detailed":

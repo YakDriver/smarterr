@@ -22,22 +22,14 @@ var (
 	debugMutex        sync.Mutex
 )
 
-// EnableDebug sets up internal debug output based on the SmarterrDebug block in config.
+// EnableDebug sets up internal debug output based on the Smarterr block in config.
 func EnableDebug(cfg *Config) {
 	debugMutex.Lock()
 	defer debugMutex.Unlock()
-	if cfg != nil && cfg.SmarterrDebug != nil {
+	if cfg != nil && cfg.Smarterr != nil && cfg.Smarterr.Debug {
 		globalDebugEnabled = true
-		if cfg.SmarterrDebug.Output == "stdout" {
-			globalDebugOutput = os.Stdout
-		} else if cfg.SmarterrDebug.Output == "stderr" || cfg.SmarterrDebug.Output == "" {
-			globalDebugOutput = os.Stderr
-		} else {
-			f, err := os.OpenFile(cfg.SmarterrDebug.Output, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-			if err == nil {
-				globalDebugOutput = f
-			}
-		}
+		// Always use stderr for now; can extend later if needed
+		globalDebugOutput = os.Stderr
 	} else {
 		globalDebugEnabled = false
 		globalDebugOutput = os.Stderr
