@@ -117,88 +117,6 @@ token "name" {
 - `source = "call_stack"`: Uses the live stack at the point of error reporting.
 - `source = "error_stack"`: Uses the stack captured at the point of error creation (via `NewError`/`Errorf`).
 
-Example:
-
-```hcl
-token "happening" {
-  stack_matches = [
-    "create",
-    "read",
-    "update",
-    "delete",
-    "read_set",
-    "read_find",
-    "create_wait"
-  ]
-}
-
-token "service" {
-  parameter = "service"
-}
-
-token "resource" {
-  context = "resource_name"
-}
-
-token "identifier" {
-  arg = "id"
-}
-
-token "clean_error" {
-  source = "error"
-  transforms = [
-    "clean_aws_error"
-  ]
-}
-
-token "error" {
-  source = "error"
-}
-
-token "suggest" {
-  source = "hints"
-}
-```
-
-### `parameter`
-
-Reference:
-
-```
-parameter "name" {
-  value = "..."
-}
-```
-
-Example:
-
-```hcl
-parameter "service" {
-  value = "CloudWatch"
-}
-```
-
-### `hint`
-
-Reference:
-
-```
-hint "name" {
-  error_contains = "..."   # Substring match on error
-  regex_match    = "..."   # Regex match on error
-  suggestion     = "..."   # Text to show if matched
-}
-```
-
-Example:
-
-```hcl
-hint "example_hint" {
-  error_contains = "InvalidParameterCombination"
-  suggestion     = "Check your AWS resource parameters."
-}
-```
-
 ### `stack_match`
 
 Reference:
@@ -206,7 +124,6 @@ Reference:
 ```
 stack_match "name" {
   called_from  = "..."   # Regex for function name
-  called_after = "..."   # Regex for previous function in stack
   display      = "..."   # Value to use if matched
 }
 ```
@@ -234,22 +151,19 @@ stack_match "delete" {
   display     = "deleting"
 }
 
-stack_match "read_set" {
-  called_after = "Set"
-  called_from  = "resource[a-zA-Z0-9]*Read"
-  display      = "setting during read"
+stack_match "wait" {
+  called_from = "wait.*"
+  display     = "waiting during operation"
 }
 
-stack_match "read_find" {
-  called_after = "find.*"
-  called_from  = "resource[a-zA-Z0-9]*Read"
-  display      = "finding during read"
+stack_match "find" {
+  called_from = "find.*"
+  display     = "finding during operation"
 }
 
-stack_match "create_wait" {
-  called_after = "wait.*"
-  called_from  = "resource[a-zA-Z0-9]*Create"
-  display      = "waiting during creation"
+stack_match "set" {
+  called_from = "Set"
+  display     = "setting during operation"
 }
 ```
 

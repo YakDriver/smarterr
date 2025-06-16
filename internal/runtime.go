@@ -389,56 +389,18 @@ func gatherCallStack(skip int) ([]runtime.Frame, error) {
 
 // processStackMatches processes the stack frames and matches them against the StackMatch rules.
 // If a match is found, it returns the Display value of the matching rule.
-// Note, if neither CalledFrom nor CalledAfter is specified, it will match and return display.
 func processStackMatches(stackMatches []StackMatch, frames []runtime.Frame) (string, error) {
-	// Partition stackMatches by specificity
-	var both, afterOnly, fromOnly, neither []StackMatch
-	for _, sm := range stackMatches {
-		hasFrom := sm.CalledFrom != ""
-		hasAfter := sm.CalledAfter != ""
-		switch {
-		case hasFrom && hasAfter:
-			both = append(both, sm)
-		case hasAfter:
-			afterOnly = append(afterOnly, sm)
-		case hasFrom:
-			fromOnly = append(fromOnly, sm)
-		default:
-			neither = append(neither, sm)
-		}
-	}
-	groups := [][]StackMatch{both, afterOnly, fromOnly, neither}
-
-	for _, group := range groups {
-		if len(group) == 0 {
-			continue
-		}
-		// For each group, walk the frames with correct previousFunc tracking
-		for i, frame := range frames {
-			var previousFunc string
-			if i+1 < len(frames) {
-				previousFunc = frames[i+1].Function
+	for _, frame := range frames {
+		for _, sm := range stackMatches {
+			if sm.CalledFrom == "" {
+				continue
 			}
-			for _, match := range group {
-				if match.CalledFrom != "" {
-					matched, err := regexp.MatchString(match.CalledFrom, frame.Function)
-					if err != nil {
-						return "", fmt.Errorf("invalid regex in CalledFrom for StackMatch %q: %w", match.Name, err)
-					}
-					if !matched {
-						continue
-					}
-				}
-				if match.CalledAfter != "" {
-					matched, err := regexp.MatchString(match.CalledAfter, previousFunc)
-					if err != nil {
-						return "", fmt.Errorf("invalid regex in CalledAfter for StackMatch %q: %w", match.Name, err)
-					}
-					if !matched {
-						continue
-					}
-				}
-				return match.Display, nil
+			matched, err := regexp.MatchString(sm.CalledFrom, frame.Function)
+			if err != nil {
+				return "", fmt.Errorf("invalid regex in CalledFrom for StackMatch %q: %w", sm.Name, err)
+			}
+			if matched {
+				return sm.Display, nil
 			}
 		}
 	}

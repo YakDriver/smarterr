@@ -151,9 +151,6 @@ func convertConfigToHCL(cfg *internal.Config) ([]byte, error) {
 		if sm.CalledFrom != "" {
 			b.SetAttributeValue("called_from", cty.StringVal(sm.CalledFrom))
 		}
-		if sm.CalledAfter != "" {
-			b.SetAttributeValue("called_after", cty.StringVal(sm.CalledAfter))
-		}
 		b.SetAttributeValue("display", cty.StringVal(sm.Display))
 	}
 

@@ -74,8 +74,7 @@ type Hint struct {
 }
 
 type StackMatch struct {
-	Name        string `hcl:"name,label"`
-	CalledFrom  string `hcl:"called_from,optional"`
-	CalledAfter string `hcl:"called_after,optional"`
-	Display     string `hcl:"display"`
+	Name       string `hcl:"name,label"`
+	CalledFrom string `hcl:"called_from,optional"`
+	Display    string `hcl:"display"`
 }
