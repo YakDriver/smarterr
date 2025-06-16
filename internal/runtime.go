@@ -280,6 +280,37 @@ func (t *Token) Resolve(ctx context.Context, rt *Runtime) string {
 			}
 		}
 
+	case "error_stack":
+		// Use the captured stack from smarterr.Error if available
+		var filteredStackMatches []StackMatch
+		for _, name := range t.StackMatches {
+			for _, sm := range rt.Config.StackMatches {
+				if sm.Name == name {
+					filteredStackMatches = append(filteredStackMatches, sm)
+					break
+				}
+			}
+		}
+		var frames []runtime.Frame
+		if errObj, ok := rt.Error.(interface{ Stack() []runtime.Frame }); ok && rt.Error != nil {
+			frames = errObj.Stack()
+		}
+		if len(frames) == 0 {
+			Debugf("Fallback for token %q: error_stack unavailable", t.Name)
+			value = fallbackMessage(rt.Config, t.Name, "error_stack unavailable")
+		} else {
+			display, err := processStackMatches(filteredStackMatches, frames)
+			if err != nil {
+				Debugf("Fallback for token %q: error_stack match error: %s", t.Name, err.Error())
+				value = fallbackMessage(rt.Config, t.Name, "error_stack match error: "+err.Error())
+			} else if display != "" {
+				value = display
+			} else {
+				Debugf("Fallback for token %q: no error_stack match found", t.Name)
+				value = fallbackMessage(rt.Config, t.Name, "no error_stack match found")
+			}
+		}
+
 	case "error":
 		Debugf("Resolving error token: %s, err: %s", t.Name, rt.Error)
 		if rt.Error == nil {

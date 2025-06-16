@@ -1,6 +1,6 @@
 # smarterr Go API Reference
 
-This document describes the public Go API for smarterr, including configuration, logger setup, and error appending.
+This document describes the public Go API for smarterr, including configuration, logger setup, error wrapping/annotation, and error appending.
 
 ---
 
@@ -85,6 +85,49 @@ type Logger interface {
 
 ---
 
+## Error Wrapping & Annotation
+
+smarterr provides structured error wrapping to capture context and call stack information at the point an error is created. This enables powerful, config-driven diagnostics and stack matching.
+
+### NewError
+
+```go
+func NewError(err error) error
+```
+Wraps an existing error with smarterr metadata, including a captured call stack. Use this at the site where an error is first returned or recognized.
+
+### Errorf
+
+```go
+func Errorf(format string, args ...any) error
+```
+Formats a new error (like `fmt.Errorf`) and captures the call stack and message. Use this for new errors.
+
+#### Example Usage
+
+```go
+if err != nil {
+    return smarterr.NewError(err)
+}
+
+return smarterr.Errorf("unexpected result for alarm %q", name)
+```
+
+The resulting error can be passed directly to `smarterr.AppendSDK` or `smarterr.AppendFW` for config-driven formatting and diagnostics. The captured stack is used for advanced stack matching and template tokens.
+
+### Error Type
+
+```go
+type Error struct {
+    Err         error             // The original or wrapped error
+    Message     string            // Optional developer-provided message (from Errorf)
+    Annotations map[string]string // Arbitrary key-value annotations (e.g., subaction, resource_id)
+    Stack       []runtime.Frame   // Captured call stack for stack matching
+}
+```
+
+---
+
 ## Error Appending
 
 ### AppendFW
@@ -148,6 +191,27 @@ template "log_error" {
 - The logger (e.g., tflog) will receive the output of `log_error`.
 
 See [Full Config Schema](schema.md) for all template and token options.
+
+---
+
+## Assert
+
+```go
+func Assert[T any](val T, err error) (T, error)
+```
+A helper for wrapping errors at the point of return. If `err` is non-nil, it wraps it with `NewError` (capturing stack and context); otherwise, it returns the value and error as-is. This is especially useful for concise error handling in Go code.
+
+#### Example Usage
+
+```go
+val, err := smarterr.Assert(doSomething())
+if err != nil {
+    return val, err
+}
+
+// Also
+return smarterr.Assert(doSomething())
+```
 
 ---
 

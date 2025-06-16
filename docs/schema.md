@@ -4,6 +4,31 @@ This document describes the full configuration schema for smarterr, including al
 
 ---
 
+## Call Stack Sources: Live vs Captured
+
+smarterr supports two types of call stack sources for stack matching and tokens:
+
+- **Live Call Stack**: The stack at the point where `AppendSDK`/`AppendFW` is called. Use with `source = "call_stack"`.
+- **Captured Call Stack**: The stack captured at the point where `NewError` or `Errorf` is called. Use with `source = "error_stack"`.
+
+This distinction allows you to match on either the reporting site or the original error site, enabling more precise and context-aware diagnostics.
+
+### Example
+
+```hcl
+token "happening" {
+  source = "call_stack"
+  stack_matches = ["create", "read", "update", "delete"]
+}
+
+token "subaction" {
+  source = "error_stack"
+  stack_matches = ["wait", "find", "set"]
+}
+```
+
+---
+
 ## Top-Level Blocks
 
 - `smarterr` (optional): Behavioral settings for error formatting and diagnostics.
@@ -83,11 +108,14 @@ token "name" {
   parameter    = "..."   # Reference a parameter
   context      = "..."   # Pull from context.Context
   arg          = "..."   # Pull from AppendSDK/FW args
-  source       = "..."   # "parameter" | "context" | "arg" | "error" | "call_stack" | "hints"
+  source       = "..."   # "parameter" | "context" | "arg" | "error" | "call_stack" | "error_stack" | "hints"
   stack_matches = [ ... ] # Names of stack_match blocks
   transforms   = [ ... ] # Names of transform blocks
 }
 ```
+
+- `source = "call_stack"`: Uses the live stack at the point of error reporting.
+- `source = "error_stack"`: Uses the stack captured at the point of error creation (via `NewError`/`Errorf`).
 
 Example:
 
@@ -267,3 +295,4 @@ transform "clean_aws_error" {
 - All blocks can be layered and merged across directories.
 - See [docs/layering.md](layering.md) for details on config discovery and merging.
 - See [docs/diagnostics.md](diagnostics.md) for fallback and diagnostics behavior.
+- For advanced stack matching, see the distinction between `call_stack` and `error_stack` sources above.
