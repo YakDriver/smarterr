@@ -130,14 +130,35 @@ token "name" {
   parameter    = "..."   # Reference a parameter
   context      = "..."   # Pull from context.Context
   arg          = "..."   # Pull from AppendSDK/FW args
-  source       = "..."   # "parameter" | "context" | "arg" | "error" | "call_stack" | "error_stack" | "hints"
+  source       = "..."   # "parameter" | "context" | "arg" | "error" | "call_stack" | "error_stack" | "hints" | "diagnostic"
   stack_matches = [ ... ] # Names of stack_match blocks
-  transforms   = [ ... ] # Names of transform blocks
+  transforms   = [ ... ] # Names of transform blocks (applies to string tokens)
+  field_transforms = {   # (optional) For structured tokens like diagnostic, apply transforms to fields
+    summary  = ["upper"]
+    detail   = ["lower"]
+    # ...
+  }
 }
 ```
 
 - `source = "call_stack"`: Uses the live stack at the point of error reporting.
 - `source = "error_stack"`: Uses the stack captured at the point of error creation (via `NewError`/`Errorf`).
+- `source = "diagnostic"`: Exposes a structured token with fields (e.g., `.diag.summary`, `.diag.detail`, `.diag.severity`).
+- `field_transforms`: Map of field name to list of transform names, applied to each field of a structured token.
+
+Example:
+
+```hcl
+token "diag" {
+  source = "diagnostic"
+  field_transforms = {
+    summary = ["upper"]
+    detail  = ["lower"]
+  }
+}
+```
+
+In your template, access fields as `{{.diag.summary}}`, `{{.diag.detail}}`, etc.
 
 ### `stack_match`
 

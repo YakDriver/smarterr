@@ -389,3 +389,47 @@ func TestProcessStackMatches_CalledFromPreference(t *testing.T) {
 		})
 	}
 }
+
+func TestTokenResolve_DiagnosticSource(t *testing.T) {
+	diag := map[string]string{
+		"summary":  "Something went wrong",
+		"detail":   "A detailed explanation",
+		"severity": "ERROR",
+	}
+	cfg := &Config{
+		Transforms: []Transform{
+			{
+				Name:  "upper",
+				Steps: []TransformStep{{Type: "upper"}},
+			},
+			{
+				Name:  "lower",
+				Steps: []TransformStep{{Type: "lower"}},
+			},
+		},
+	}
+	token := Token{
+		Name:   "diag",
+		Source: "diagnostic",
+		FieldTransforms: map[string][]string{
+			"summary": {"upper"},
+			"detail":  {"lower"},
+		},
+	}
+	rt := NewRuntime(cfg, nil, nil, "diagnostic", diag)
+	ctx := context.Background()
+	val := token.Resolve(ctx, rt)
+	diagMap, ok := val.(map[string]any)
+	if !ok {
+		t.Fatalf("diagnostic token did not return map[string]any, got %T", val)
+	}
+	if diagMap["summary"] != "SOMETHING WENT WRONG" {
+		t.Errorf("summary transform failed: got %q, want %q", diagMap["summary"], "SOMETHING WENT WRONG")
+	}
+	if diagMap["detail"] != "a detailed explanation" {
+		t.Errorf("detail transform failed: got %q, want %q", diagMap["detail"], "a detailed explanation")
+	}
+	if diagMap["severity"] != "ERROR" {
+		t.Errorf("severity should be unchanged: got %q, want %q", diagMap["severity"], "ERROR")
+	}
+}

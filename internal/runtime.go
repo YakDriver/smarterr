@@ -194,7 +194,7 @@ func applyReplace(value string, step TransformStep) string {
 // Resolve takes a token and resolves it based on the runtime information.
 // It supports various source types such as parameters, context values,
 // error inspection, call stack inspection, and runtime arguments.
-func (t *Token) Resolve(ctx context.Context, rt *Runtime) string {
+func (t *Token) Resolve(ctx context.Context, rt *Runtime) any {
 	Debugf("Resolving token: %s, source: %s, parameter: %v, context: %v, arg: %v, stack_matches: %v",
 		t.Name, t.Source, t.Parameter, t.Context, t.Arg, t.StackMatches)
 	// Infer source if not set
@@ -214,11 +214,34 @@ func (t *Token) Resolve(ctx context.Context, rt *Runtime) string {
 		}
 	}
 
-	var value string
-
 	switch source {
+	case "diagnostic":
+		diag, ok := rt.Args["diagnostic"].(map[string]string)
+		if !ok || diag == nil {
+			Debugf("Fallback for token %q: diagnostic info not found in runtime args", t.Name)
+			return map[string]any{
+				"summary":  fallbackMessage(rt.Config, t.Name+".summary", "diagnostic summary not found"),
+				"detail":   fallbackMessage(rt.Config, t.Name+".detail", "diagnostic detail not found"),
+				"severity": fallbackMessage(rt.Config, t.Name+".severity", "diagnostic severity not found"),
+			}
+		}
+		result := make(map[string]any)
+		for k, v := range diag {
+			if t.FieldTransforms != nil {
+				if transforms, ok := t.FieldTransforms[k]; ok && len(transforms) > 0 {
+					val := v
+					for _, tname := range transforms {
+						val = rt.applyTransformByName(tname, val)
+					}
+					result[k] = val
+					continue
+				}
+			}
+			result[k] = v
+		}
+		return result
 	case "parameter":
-		// Look up the parameter by name.
+		var value string
 		if t.Parameter == nil {
 			Debugf("Fallback for token %q: token.Parameter is nil", t.Name)
 			value = fallbackMessage(rt.Config, t.Name, "token.Parameter is nil")
@@ -234,9 +257,12 @@ func (t *Token) Resolve(ctx context.Context, rt *Runtime) string {
 				value = fallbackMessage(rt.Config, t.Name, "parameter not found in config")
 			}
 		}
-
+		if t.Transforms != nil && len(t.Transforms) > 0 {
+			value = rt.applyTransforms(t, value)
+		}
+		return value
 	case "context":
-		// Extract value from context by key.
+		var value string
 		if t.Context == nil {
 			Debugf("Fallback for token %q: token.Context is nil", t.Name)
 			value = fallbackMessage(rt.Config, t.Name, "token.Context is nil")
@@ -249,12 +275,12 @@ func (t *Token) Resolve(ctx context.Context, rt *Runtime) string {
 				value = fmt.Sprintf("%v", val)
 			}
 		}
-
+		if t.Transforms != nil && len(t.Transforms) > 0 {
+			value = rt.applyTransforms(t, value)
+		}
+		return value
 	case "call_stack":
-		// "call_stack" is for the live stack when AppendSDK or AppendFW is called, as
-		// opposed to the "error_stack" which is for the captured stack from smarterr.Error.
-
-		// Filter StackMatches based on Token.StackMatches
+		var value string
 		var filteredStackMatches []StackMatch
 		for _, name := range t.StackMatches {
 			for _, sm := range rt.Config.StackMatches {
@@ -264,14 +290,11 @@ func (t *Token) Resolve(ctx context.Context, rt *Runtime) string {
 				}
 			}
 		}
-
-		// Gather the call stack
-		frames, err := gatherCallStack(3) // Skip 3 frames to exclude runtime.Callers, gatherCallStack, and Resolve
+		frames, err := gatherCallStack(3)
 		if err != nil {
 			Debugf("Fallback for token %q: call stack unavailable", t.Name)
 			value = fallbackMessage(rt.Config, t.Name, "call stack unavailable")
 		} else {
-			// Process the filtered stack matches
 			display, err := processStackMatches(filteredStackMatches, frames)
 			if err != nil {
 				Debugf("Fallback for token %q: stack match error: %s", t.Name, err.Error())
@@ -283,9 +306,12 @@ func (t *Token) Resolve(ctx context.Context, rt *Runtime) string {
 				value = fallbackMessage(rt.Config, t.Name, "no stack match found")
 			}
 		}
-
+		if t.Transforms != nil && len(t.Transforms) > 0 {
+			value = rt.applyTransforms(t, value)
+		}
+		return value
 	case "error_stack":
-		// Use the captured stack from smarterr.Error if available
+		var value string
 		var filteredStackMatches []StackMatch
 		for _, name := range t.StackMatches {
 			for _, sm := range rt.Config.StackMatches {
@@ -316,8 +342,12 @@ func (t *Token) Resolve(ctx context.Context, rt *Runtime) string {
 				value = fallbackMessage(rt.Config, t.Name, "no error_stack match found")
 			}
 		}
-
+		if t.Transforms != nil && len(t.Transforms) > 0 {
+			value = rt.applyTransforms(t, value)
+		}
+		return value
 	case "error":
+		var value string
 		Debugf("Resolving error token: %s, err: %s", t.Name, rt.Error)
 		if rt.Error == nil {
 			Debugf("Fallback for token %q: rt.Error is nil", t.Name)
@@ -325,9 +355,12 @@ func (t *Token) Resolve(ctx context.Context, rt *Runtime) string {
 		} else {
 			value = fmt.Sprintf("%s", rt.Error)
 		}
-
+		if t.Transforms != nil && len(t.Transforms) > 0 {
+			value = rt.applyTransforms(t, value)
+		}
+		return value
 	case "arg":
-		// Pull from runtime arguments.
+		var value string
 		if t.Arg == nil {
 			Debugf("Fallback for token %q: token.Arg is nil", t.Name)
 			value = fallbackMessage(rt.Config, t.Name, "token.Arg is nil")
@@ -340,8 +373,12 @@ func (t *Token) Resolve(ctx context.Context, rt *Runtime) string {
 				value = fmt.Sprintf("%v", argVal)
 			}
 		}
-
+		if t.Transforms != nil && len(t.Transforms) > 0 {
+			value = rt.applyTransforms(t, value)
+		}
+		return value
 	case "hints":
+		var value string
 		Debugf("Resolving hints token: %s", t.Name)
 		if rt.Error != nil {
 			value = resolveHints(rt.Error.Error(), rt.Config, nil)
@@ -350,16 +387,51 @@ func (t *Token) Resolve(ctx context.Context, rt *Runtime) string {
 			Debugf("Fallback for token %q: no matching hint found", t.Name)
 			value = fallbackMessage(rt.Config, t.Name, "no matching hint found")
 		}
-
+		if t.Transforms != nil && len(t.Transforms) > 0 {
+			value = rt.applyTransforms(t, value)
+		}
+		return value
 	default:
+		var value string
 		Debugf("Fallback for token %q: unknown token source", t.Name)
 		value = fallbackMessage(rt.Config, t.Name, "unknown token source")
+		if t.Transforms != nil && len(t.Transforms) > 0 {
+			value = rt.applyTransforms(t, value)
+		}
+		return value
 	}
+}
 
-	Debugf("Resolved token %q with source %q: %q", t.Name, source, value)
-	// Only apply transforms if t.Transforms is non-nil and non-empty
-	if t.Transforms != nil && len(t.Transforms) > 0 {
-		value = rt.applyTransforms(t, value)
+// Helper to apply a named transform to a value (for field transforms)
+func (rt *Runtime) applyTransformByName(name, value string) string {
+	if rt.Config == nil {
+		return value
+	}
+	for i := range rt.Config.Transforms {
+		if rt.Config.Transforms[i].Name == name {
+			for _, step := range rt.Config.Transforms[i].Steps {
+				switch step.Type {
+				case "strip_prefix":
+					value = applyStripPrefix(value, step)
+				case "strip_suffix":
+					value = applyStripSuffix(value, step)
+				case "remove":
+					value = applyRemove(value, step)
+				case "replace":
+					value = applyReplace(value, step)
+				case "trim_space":
+					value = strings.TrimSpace(value)
+				case "fix_space":
+					value = strings.TrimSpace(value)
+					value = regexp.MustCompile(`\s+`).ReplaceAllString(value, " ")
+				case "lower":
+					value = strings.ToLower(value)
+				case "upper":
+					value = strings.ToUpper(value)
+				}
+			}
+			break
+		}
 	}
 	return value
 }

@@ -159,6 +159,45 @@ transform "clean_aws_error" {
 
 ---
 
+## Diagnostic Enrichment & Structured Tokens
+
+smarterr supports config-driven enrichment of both errors and framework-generated diagnostics (such as value conversion errors in Terraform Plugin Framework) using a structured diagnostic token.
+
+### Diagnostic Token Usage
+
+- Define a token with `source = "diagnostic"` to expose a structured token with fields (e.g., `.diag.summary`, `.diag.detail`, `.diag.severity`).
+- Use `field_transforms` to apply transforms to individual fields of the diagnostic token.
+
+Example:
+
+```hcl
+token "diag" {
+  source = "diagnostic"
+  field_transforms = {
+    summary = ["upper"]
+    detail  = ["lower"]
+  }
+}
+```
+
+In your template, access fields as `{{.diag.summary}}`, `{{.diag.detail}}`, etc.
+
+Example template:
+
+```hcl
+template "diagnostic_summary" {
+  format = "{{.happening}} {{.service}} {{.resource}}: {{.diag.summary}}"
+}
+
+template "diagnostic_detail" {
+  format = "ID: {{.identifier}}\nCause: {{.diag.detail}}"
+}
+```
+
+This enables actionable, context-rich diagnostics for both errors and framework-generated issues, all managed declaratively via config.
+
+---
+
 ## Learn More
 
 - [Full Config Schema](docs/schema.md)

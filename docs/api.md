@@ -194,6 +194,45 @@ See [Full Config Schema](schema.md) for all template and token options.
 
 ---
 
+## Diagnostic Token Support
+
+smarterr supports config-driven enrichment of both errors and framework-generated diagnostics (e.g., value conversion errors in Terraform Plugin Framework) via a special diagnostic token source.
+
+### Diagnostic Token
+
+- Use `source = "diagnostic"` in a token block to expose a structured token with fields (e.g., `.diag.summary`, `.diag.detail`, `.diag.severity`).
+- Use `field_transforms` to apply transforms to individual fields of the diagnostic token.
+
+#### Example
+
+```hcl
+token "diag" {
+  source = "diagnostic"
+  field_transforms = {
+    summary = ["upper"]
+    detail  = ["lower"]
+  }
+}
+```
+
+In your template, access fields as `{{.diag.summary}}`, `{{.diag.detail}}`, etc.
+
+#### Template Example
+
+```hcl
+template "diagnostic_summary" {
+  format = "{{.happening}} {{.service}} {{.resource}}: {{.diag.summary}}"
+}
+
+template "diagnostic_detail" {
+  format = "ID: {{.identifier}}\nCause: {{.diag.detail}}"
+}
+```
+
+- The diagnostic token is populated from the runtime (e.g., framework diagnostic context) and can be enriched and transformed via config.
+
+---
+
 ## Assert
 
 ```go

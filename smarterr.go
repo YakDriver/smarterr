@@ -28,18 +28,65 @@ func SetFS(fs FileSystem, baseDir string) {
 // This will not change the severity of either incoming or existing diagnostics, but will change
 // the summary and detail of _incoming_ diagnostics only with smarterr information.
 func EnrichAppendFW(ctx context.Context, existing fwdiag.Diagnostics, incoming fwdiag.Diagnostics, keyvals ...any) {
+	if len(incoming) == 0 {
+		return
+	}
+	// Load config once
+	if wrappedFS == nil {
+		Debugf("No wrappedFS set; cannot enrich diagnostics")
+		for _, diag := range incoming {
+			if diag == nil || existing.Contains(diag) {
+				continue
+			}
+			existing = append(existing, diag)
+		}
+		return
+	}
+	relStackPaths := collectRelStackPaths(wrappedBaseDir)
+	var diagnostics []error
+	cfg, cfgErr := internal.LoadConfigWithDiagnostics(wrappedFS, relStackPaths, wrappedBaseDir, &diagnostics)
+	if cfgErr != nil {
+		Debugf("Config load error: %v", cfgErr)
+		for _, diag := range incoming {
+			if diag == nil || existing.Contains(diag) {
+				continue
+			}
+			existing = append(existing, diag)
+		}
+		return
+	}
+
 	for _, diag := range incoming {
 		if diag == nil {
 			continue
 		}
-
-		// Need care here to deduplicate if either the incoming unenriched diagnostics
-		// or the incoming enriched diagnostics already exist in the existing diagnostics.
-
+		// Deduplicate before enrichment
 		if existing.Contains(diag) {
 			continue
 		}
-		existing = append(existing, diag)
+		// Enrich: build runtime with diagnostic as a token arg
+		diagMap := map[string]string{
+			"summary":  diag.Summary(),
+			"detail":   diag.Detail(),
+			"severity": diag.Severity().String(),
+		}
+		rt := internal.NewRuntimeWithDiagnostics(cfg, nil, nil, &diagnostics, append(keyvals, "diagnostic", diagMap)...)
+		values := rt.BuildTokenValueMap(ctx)
+		// Render summary/detail using diagnostic templates if present, else fallback to original
+		summary, detail := diag.Summary(), diag.Detail()
+		if s, err := cfg.RenderTemplate("diagnostic_summary", values); err == nil && s != "" {
+			summary = s
+		}
+		if d, err := cfg.RenderTemplate("diagnostic_detail", values); err == nil && d != "" {
+			detail = d
+		}
+		// Create enriched diagnostic
+		enriched := fwdiag.NewErrorDiagnostic(summary, detail)
+		// Deduplicate after enrichment
+		if existing.Contains(enriched) {
+			continue
+		}
+		existing = append(existing, enriched)
 	}
 }
 
