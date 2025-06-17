@@ -99,6 +99,28 @@ template "log_error" {
 }
 ```
 
+### Template Types
+
+smarterr supports the following template types:
+
+- `error_summary`: Rendered for error summary (main error message).
+- `error_detail`: Rendered for error detail (expanded/collapsed details).
+- `diagnostic_summary`: Rendered for framework/diagnostic summary (e.g., value conversion errors).
+- `diagnostic_detail`: Rendered for framework/diagnostic detail.
+- `log_error`, `log_warn`, `log_info`: Rendered to the user-facing logger at the corresponding level.
+
+Reference:
+
+```
+template "diagnostic_summary" {
+  format = "{{.happening}} {{.service}} {{.resource}}: {{.original_summary}}"
+}
+
+template "diagnostic_detail" {
+  format = "ID: {{.identifier}}\nOriginal: {{.original_detail}}\nContext: {{.happening}} {{.service}} {{.resource}}"
+}
+```
+
 ### `token`
 
 Reference:
