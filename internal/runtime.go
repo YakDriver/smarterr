@@ -5,6 +5,7 @@ package internal
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"runtime"
@@ -250,6 +251,9 @@ func (t *Token) Resolve(ctx context.Context, rt *Runtime) string {
 		}
 
 	case "call_stack":
+		// "call_stack" is for the live stack when AppendSDK or AppendFW is called, as
+		// opposed to the "error_stack" which is for the captured stack from smarterr.Error.
+
 		// Filter StackMatches based on Token.StackMatches
 		var filteredStackMatches []StackMatch
 		for _, name := range t.StackMatches {
@@ -292,8 +296,10 @@ func (t *Token) Resolve(ctx context.Context, rt *Runtime) string {
 			}
 		}
 		var frames []runtime.Frame
-		if errObj, ok := rt.Error.(interface{ Stack() []runtime.Frame }); ok && rt.Error != nil {
-			frames = errObj.Stack()
+		Debugf("err type: %T", rt.Error)
+		var stackProvider interface{ Stack() []runtime.Frame }
+		if errors.As(rt.Error, &stackProvider) && stackProvider != nil {
+			frames = stackProvider.Stack()
 		}
 		if len(frames) == 0 {
 			Debugf("Fallback for token %q: error_stack unavailable", t.Name)

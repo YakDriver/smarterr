@@ -133,10 +133,10 @@ func appendCommon(ctx context.Context, add func(summary, detail string), err err
 // It wraps a base error and includes structured annotations
 // that can be used by AppendSDK/FW to construct clear, user-friendly diagnostics.
 type Error struct {
-	Err         error             // The original or wrapped error
-	Message     string            // Optional developer-provided message (from Errorf)
-	Annotations map[string]string // Arbitrary key-value annotations (e.g., subaction, resource_id)
-	Stack       []runtime.Frame   // Captured call stack for stack matching
+	Err           error             // The original or wrapped error
+	Message       string            // Optional developer-provided message (from Errorf)
+	Annotations   map[string]string // Arbitrary key-value annotations (e.g., subaction, resource_id)
+	CapturedStack []runtime.Frame   // Captured call stack for stack matching
 }
 
 // Error implements the error interface.
@@ -150,6 +150,11 @@ func (e *Error) Error() string {
 // Unwrap returns the underlying error.
 func (e *Error) Unwrap() error {
 	return e.Err
+}
+
+// Stack returns the captured call stack frames.
+func (e *Error) Stack() []runtime.Frame {
+	return e.CapturedStack
 }
 
 // NewError wraps an existing error with smarterr metadata derived from the call stack.
@@ -169,9 +174,9 @@ func NewError(err error) error {
 	}
 	stack := captureStack(3) // skip 3 to get the caller of NewError
 	return &Error{
-		Err:         err,
-		Annotations: map[string]string{},
-		Stack:       stack,
+		Err:           err,
+		Annotations:   map[string]string{},
+		CapturedStack: stack,
 	}
 }
 
@@ -186,10 +191,10 @@ func Errorf(format string, args ...any) error {
 	msg := fmt.Sprintf(format, args...)
 	stack := captureStack(3) // skip 3 to get the caller of Errorf
 	return &Error{
-		Err:         errors.New(msg),
-		Message:     msg,
-		Annotations: map[string]string{},
-		Stack:       stack,
+		Err:           errors.New(msg),
+		Message:       msg,
+		Annotations:   map[string]string{},
+		CapturedStack: stack,
 	}
 }
 
