@@ -10,7 +10,9 @@ import (
 )
 
 const (
-	ID = "id"
+	ID           = "id"
+	ResourceName = "resource_name"
+	ServiceName  = "service_name"
 )
 
 // Re-export internal.Debugf for internal debugging
