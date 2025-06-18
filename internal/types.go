@@ -50,15 +50,16 @@ type Transform struct {
 
 // Token represents a token in the configuration, which can be used for error message formatting.
 type Token struct {
-	Name         string   `hcl:"name,label"`
-	Source       string   `hcl:"source,optional"`
-	Parameter    *string  `hcl:"parameter,optional"`
-	StackMatches []string `hcl:"stack_matches,optional"`
-	Arg          *string  `hcl:"arg,optional"`
-	Context      *string  `hcl:"context,optional"`
-	Pattern      *string  `hcl:"pattern,optional"`
-	Replace      *string  `hcl:"replace,optional"`
-	Transforms   []string `hcl:"transforms,optional"`
+	Name            string              `hcl:"name,label"`
+	Source          string              `hcl:"source,optional"`
+	Parameter       *string             `hcl:"parameter,optional"`
+	StackMatches    []string            `hcl:"stack_matches,optional"`
+	Arg             *string             `hcl:"arg,optional"`
+	Context         *string             `hcl:"context,optional"`
+	Pattern         *string             `hcl:"pattern,optional"`
+	Replace         *string             `hcl:"replace,optional"`
+	Transforms      []string            `hcl:"transforms,optional"`
+	FieldTransforms map[string][]string `hcl:"field_transforms,optional"`
 }
 
 type Parameter struct {
@@ -74,8 +75,7 @@ type Hint struct {
 }
 
 type StackMatch struct {
-	Name        string `hcl:"name,label"`
-	CalledFrom  string `hcl:"called_from,optional"`
-	CalledAfter string `hcl:"called_after,optional"`
-	Display     string `hcl:"display"`
+	Name       string `hcl:"name,label"`
+	CalledFrom string `hcl:"called_from,optional"`
+	Display    string `hcl:"display"`
 }

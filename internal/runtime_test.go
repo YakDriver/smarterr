@@ -336,13 +336,13 @@ func TestTokenResolve_HintsSource(t *testing.T) {
 	}
 }
 
-func TestProcessStackMatches_SpecificityPreference(t *testing.T) {
+func TestProcessStackMatches_CalledFromPreference(t *testing.T) {
 	matches := []StackMatch{
 		{Name: "create", CalledFrom: "resource[a-zA-Z0-9]*Create", Display: "creating"},
 		{Name: "read", CalledFrom: "resource[a-zA-Z0-9]*Read", Display: "reading"},
-		{Name: "create_wait", CalledFrom: "resource[a-zA-Z0-9]*Create", CalledAfter: "wait.*", Display: "waiting during creation"},
-		{Name: "read_find", CalledFrom: "resource[a-zA-Z0-9]*Read", CalledAfter: "find.*", Display: "finding during read"},
-		{Name: "read_set", CalledFrom: "resource[a-zA-Z0-9]*Read", CalledAfter: "Set", Display: "setting during read"},
+		{Name: "wait", CalledFrom: "wait.*", Display: "waiting during operation"},
+		{Name: "find", CalledFrom: "find.*", Display: "finding during operation"},
+		{Name: "set", CalledFrom: "Set", Display: "setting during operation"},
 	}
 
 	tests := []struct {
@@ -351,32 +351,27 @@ func TestProcessStackMatches_SpecificityPreference(t *testing.T) {
 		want   string
 	}{
 		{
-			name:   "most specific: create_wait",
-			frames: []runtime.Frame{{Function: "resourceFooCreate"}, {Function: "waitForSomething"}},
-			want:   "waiting during creation",
+			name:   "match wait subaction",
+			frames: []runtime.Frame{{Function: "waitForSomething"}, {Function: "resourceFooCreate"}},
+			want:   "waiting during operation",
 		},
 		{
-			name:   "most specific: read_find",
-			frames: []runtime.Frame{{Function: "resourceFooRead"}, {Function: "findBar"}},
-			want:   "finding during read",
+			name:   "match find subaction",
+			frames: []runtime.Frame{{Function: "findBar"}, {Function: "resourceFooRead"}},
+			want:   "finding during operation",
 		},
 		{
-			name:   "most specific: read_set",
-			frames: []runtime.Frame{{Function: "resourceBarRead"}, {Function: "Set"}},
-			want:   "setting during read",
+			name:   "match set subaction",
+			frames: []runtime.Frame{{Function: "Set"}, {Function: "resourceBarRead"}},
+			want:   "setting during operation",
 		},
 		{
-			name:   "fallback to called_after only",
-			frames: []runtime.Frame{{Function: "foo"}, {Function: "Set"}},
-			want:   "",
-		},
-		{
-			name:   "fallback to called_from only",
+			name:   "fallback to create",
 			frames: []runtime.Frame{{Function: "resourceFooCreate"}},
 			want:   "creating",
 		},
 		{
-			name:   "fallback to called_from only (read)",
+			name:   "fallback to read",
 			frames: []runtime.Frame{{Function: "resourceFooRead"}},
 			want:   "reading",
 		},
@@ -392,5 +387,49 @@ func TestProcessStackMatches_SpecificityPreference(t *testing.T) {
 				t.Errorf("got %q, want %q", display, tc.want)
 			}
 		})
+	}
+}
+
+func TestTokenResolve_DiagnosticSource(t *testing.T) {
+	diag := map[string]string{
+		"summary":  "Something went wrong",
+		"detail":   "A detailed explanation",
+		"severity": "ERROR",
+	}
+	cfg := &Config{
+		Transforms: []Transform{
+			{
+				Name:  "upper",
+				Steps: []TransformStep{{Type: "upper"}},
+			},
+			{
+				Name:  "lower",
+				Steps: []TransformStep{{Type: "lower"}},
+			},
+		},
+	}
+	token := Token{
+		Name:   "diag",
+		Source: "diagnostic",
+		FieldTransforms: map[string][]string{
+			"summary": {"upper"},
+			"detail":  {"lower"},
+		},
+	}
+	rt := NewRuntime(cfg, nil, nil, "diagnostic", diag)
+	ctx := context.Background()
+	val := token.Resolve(ctx, rt)
+	diagMap, ok := val.(map[string]any)
+	if !ok {
+		t.Fatalf("diagnostic token did not return map[string]any, got %T", val)
+	}
+	if diagMap["summary"] != "SOMETHING WENT WRONG" {
+		t.Errorf("summary transform failed: got %q, want %q", diagMap["summary"], "SOMETHING WENT WRONG")
+	}
+	if diagMap["detail"] != "a detailed explanation" {
+		t.Errorf("detail transform failed: got %q, want %q", diagMap["detail"], "a detailed explanation")
+	}
+	if diagMap["severity"] != "ERROR" {
+		t.Errorf("severity should be unchanged: got %q, want %q", diagMap["severity"], "ERROR")
 	}
 }

@@ -1,6 +1,25 @@
 # smarterr Go API Reference
 
-This document describes the public Go API for smarterr, including configuration, logger setup, and error appending.
+This document describes the public Go API for smarterr, including configuration, logger setup, error wrapping/annotation, and error appending.
+
+---
+
+## Template Types and Usage
+
+smarterr supports two main template types for customizing diagnostic output:
+
+- **Error templates**: `error_summary` and `error_detail`
+  - Used when formatting diagnostics from Go errors (e.g., via `AddError` or `Append`).
+- **Diagnostic templates**: `diagnostic_summary` and `diagnostic_detail`
+  - Used when enriching framework-generated diagnostics (e.g., via `EnrichAppend`).
+
+> **Note:** All output is a diagnostic. The template name refers to the input type (error vs. diagnostic).
+
+**Function-to-template mapping:**
+- `AddError` and `Append` use `error_summary` and `error_detail`.
+- `EnrichAppend` uses `diagnostic_summary` and `diagnostic_detail`.
+
+If the relevant templates are not defined, smarterr falls back to the original error or diagnostic content.
 
 ---
 
@@ -85,21 +104,64 @@ type Logger interface {
 
 ---
 
+## Error Wrapping & Annotation
+
+smarterr provides structured error wrapping to capture context and call stack information at the point an error is created. This enables powerful, config-driven diagnostics and stack matching.
+
+### NewError
+
+```go
+func NewError(err error) error
+```
+Wraps an existing error with smarterr metadata, including a captured call stack. Use this at the site where an error is first returned or recognized.
+
+### Errorf
+
+```go
+func Errorf(format string, args ...any) error
+```
+Formats a new error (like `fmt.Errorf`) and captures the call stack and message. Use this for new errors.
+
+#### Example Usage
+
+```go
+if err != nil {
+    return smarterr.NewError(err)
+}
+
+return smarterr.Errorf("unexpected result for alarm %q", name)
+```
+
+The resulting error can be passed directly to `smarterr.Append` or `smarterr.AddError` for config-driven formatting and diagnostics. The captured stack is used for advanced stack matching and template tokens.
+
+### Error Type
+
+```go
+type Error struct {
+    Err         error             // The original or wrapped error
+    Message     string            // Optional developer-provided message (from Errorf)
+    Annotations map[string]string // Arbitrary key-value annotations (e.g., subaction, resource_id)
+    Stack       []runtime.Frame   // Captured call stack for stack matching
+}
+```
+
+---
+
 ## Error Appending
 
-### AppendFW
+### AddError
 
 ```go
-func AppendFW(ctx context.Context, diags fwdiag.Diagnostics, err error, keyvals ...any)
+func AddError(ctx context.Context, diags fwdiag.Diagnostics, err error, keyvals ...any)
 ```
-Appends a formatted error to Terraform Plugin Framework diagnostics.
+Adds a formatted error to Terraform Plugin Framework diagnostics.
 
-### AppendSDK
+### Append
 
 ```go
-func AppendSDK(ctx context.Context, diags sdkdiag.Diagnostics, err error, keyvals ...any) sdkdiag.Diagnostics
+func Append(ctx context.Context, diags sdkdiag.Diagnostics, err error, keyvals ...any) sdkdiag.Diagnostics
 ```
-Appends a formatted error to Terraform Plugin SDK diagnostics and returns the updated diagnostics slice.
+Adds a formatted error to Terraform Plugin SDK diagnostics and returns the updated diagnostics slice.
 
 ---
 
@@ -119,13 +181,13 @@ smarterr uses special template names in your config to control where output goes
 - `error_detail`: Rendered to the diagnostics detail (the expanded/collapsed error details).
 - `log_error`, `log_warn`, `log_info`: Rendered to the user-facing logger (e.g., tflog or Go log) at the corresponding level.
 
-You reference these templates by name in your config. smarterr will automatically use them when you call `AppendFW` or `AppendSDK`.
+You reference these templates by name in your config. smarterr will automatically use them when you call `Append` or `AddError`.
 
 ### Example: API Call + Config
 
 **Go code:**
 ```go
-smarterr.AppendSDK(ctx, diags, err, "id", id)
+smarterr.Append(ctx, diags, err, "id", id)
 ```
 
 **Config (HCL):**
@@ -148,6 +210,66 @@ template "log_error" {
 - The logger (e.g., tflog) will receive the output of `log_error`.
 
 See [Full Config Schema](schema.md) for all template and token options.
+
+---
+
+## Diagnostic Token Support
+
+smarterr supports config-driven enrichment of both errors and framework-generated diagnostics (e.g., value conversion errors in Terraform Plugin Framework) via a special diagnostic token source.
+
+### Diagnostic Token
+
+- Use `source = "diagnostic"` in a token block to expose a structured token with fields (e.g., `.diag.summary`, `.diag.detail`, `.diag.severity`).
+- Use `field_transforms` to apply transforms to individual fields of the diagnostic token.
+
+#### Example
+
+```hcl
+token "diag" {
+  source = "diagnostic"
+  field_transforms = {
+    summary = ["upper"]
+    detail  = ["lower"]
+  }
+}
+```
+
+In your template, access fields as `{{.diag.summary}}`, `{{.diag.detail}}`, etc.
+
+#### Template Example
+
+```hcl
+template "diagnostic_summary" {
+  format = "{{.happening}} {{.service}} {{.resource}}: {{.diag.summary}}"
+}
+
+template "diagnostic_detail" {
+  format = "ID: {{.identifier}}\nCause: {{.diag.detail}}"
+}
+```
+
+- The diagnostic token is populated from the runtime (e.g., framework diagnostic context) and can be enriched and transformed via config.
+
+---
+
+## Assert
+
+```go
+func Assert[T any](val T, err error) (T, error)
+```
+A helper for wrapping errors at the point of return. If `err` is non-nil, it wraps it with `NewError` (capturing stack and context); otherwise, it returns the value and error as-is. This is especially useful for concise error handling in Go code.
+
+#### Example Usage
+
+```go
+val, err := smarterr.Assert(doSomething())
+if err != nil {
+    return val, err
+}
+
+// Also
+return smarterr.Assert(doSomething())
+```
 
 ---
 

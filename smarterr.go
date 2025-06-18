@@ -9,6 +9,12 @@ import (
 	sdkdiag "github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 )
 
+const (
+	ID           = "id"
+	ResourceName = "resource_name"
+	ServiceName  = "service_name"
+)
+
 // Re-export internal.Debugf for internal debugging
 var Debugf = internal.Debugf
 
@@ -24,11 +30,104 @@ func SetFS(fs FileSystem, baseDir string) {
 	wrappedBaseDir = baseDir
 }
 
-func AppendFW(ctx context.Context, diags fwdiag.Diagnostics, err error, keyvals ...any) {
-	Debugf("AppendFW called with error: %v", err)
+// EnrichAppend is a helper function that enriches diagnostics with smarterr information.
+// This will not change the severity of either incoming or existing diagnostics, but will change
+// the summary and detail of _incoming_ diagnostics only with smarterr information.
+// Mutates the diagnostics in place via pointer, matching the framework pattern.
+//
+// Template usage:
+//   - If you want to customize the output for framework-generated diagnostics (e.g., value conversion errors),
+//     define `diagnostic_summary` and `diagnostic_detail` templates in your config. These will be used by EnrichAppend.
+//   - If these templates are not defined, the original diagnostic summary and detail are used.
+//   - Note: All output is a diagnostic; the template name refers to the input type (error vs. diagnostic).
+func EnrichAppend(ctx context.Context, existing *fwdiag.Diagnostics, incoming fwdiag.Diagnostics, keyvals ...any) {
 	defer func() {
 		if r := recover(); r != nil {
-			Debugf("Panic recovered in AppendFW: %v", r)
+			Debugf("Panic recovered in EnrichAppend: %v", r)
+			// Fallback: append all incoming diags not already in existing
+			for _, diag := range incoming {
+				if diag == nil || existing.Contains(diag) {
+					continue
+				}
+				existing.Append(diag)
+			}
+		}
+	}()
+	if len(incoming) == 0 {
+		return
+	}
+	// Load config once
+	if wrappedFS == nil {
+		Debugf("No wrappedFS set; cannot enrich diagnostics")
+		for _, diag := range incoming {
+			if diag == nil || existing.Contains(diag) {
+				continue
+			}
+			existing.Append(diag)
+		}
+		return
+	}
+	relStackPaths := collectRelStackPaths(wrappedBaseDir)
+	var diagnostics []error
+	cfg, cfgErr := internal.LoadConfigWithDiagnostics(wrappedFS, relStackPaths, wrappedBaseDir, &diagnostics)
+	if cfgErr != nil {
+		Debugf("Config load error: %v", cfgErr)
+		for _, diag := range incoming {
+			if diag == nil || existing.Contains(diag) {
+				continue
+			}
+			existing.Append(diag)
+		}
+		return
+	}
+
+	for _, diag := range incoming {
+		if diag == nil {
+			continue
+		}
+		// Deduplicate before enrichment
+		if existing.Contains(diag) {
+			continue
+		}
+		// Enrich: build runtime with diagnostic as a token arg
+		diagMap := map[string]string{
+			"summary":  diag.Summary(),
+			"detail":   diag.Detail(),
+			"severity": diag.Severity().String(),
+		}
+		rt := internal.NewRuntimeWithDiagnostics(cfg, nil, nil, &diagnostics, append(keyvals, "diagnostic", diagMap)...)
+		values := rt.BuildTokenValueMap(ctx)
+		// Render summary/detail using diagnostic templates if present, else fallback to original
+		summary, detail := diag.Summary(), diag.Detail()
+		if s, err := cfg.RenderTemplate("diagnostic_summary", values); err == nil && s != "" {
+			summary = s
+		}
+		if d, err := cfg.RenderTemplate("diagnostic_detail", values); err == nil && d != "" {
+			detail = d
+		}
+		// Create enriched diagnostic
+		enriched := fwdiag.NewErrorDiagnostic(summary, detail)
+		// Deduplicate after enrichment
+		if existing.Contains(enriched) {
+			continue
+		}
+		existing.Append(enriched)
+	}
+}
+
+// AddError adds a formatted error to Terraform Plugin Framework diagnostics.
+// Mutates the diagnostics in place via pointer, matching the framework pattern.
+//
+// Template usage:
+//   - To customize the output for errors (Go error values), define `error_summary` and `error_detail` templates in your config.
+//   - These templates control the summary and detail for diagnostics created from errors via AddError.
+//   - If these templates are not defined, a fallback using the original error is used.
+//   - Note: All output is a diagnostic; the template name refers to the input type (error vs. diagnostic).
+func AddError(ctx context.Context, diags *fwdiag.Diagnostics, err error, keyvals ...any) {
+	Debugf("AddError called with error: %v", err)
+	defer func() {
+		if r := recover(); r != nil {
+			Debugf("Panic recovered in AddError: %v", r)
 			// Fallback: original error summary, panic at end of detail
 			summary := firstNWords(err, 3)
 			detail := ""
@@ -50,16 +149,23 @@ func AppendFW(ctx context.Context, diags fwdiag.Diagnostics, err error, keyvals 
 		}
 	}()
 	appendCommon(ctx, func(summary, detail string) {
-		Debugf("AppendFW add error: summary=%q detail=%q", summary, detail)
+		Debugf("AddError add error: summary=%q detail=%q", summary, detail)
 		diags.AddError(summary, detail)
 	}, err, keyvals...)
 }
 
-func AppendSDK(ctx context.Context, diags sdkdiag.Diagnostics, err error, keyvals ...any) sdkdiag.Diagnostics {
-	Debugf("AppendSDK called with error: %v", err)
+// Append adds a formatted error to Terraform Plugin SDK diagnostics and returns the updated diagnostics slice.
+//
+// Template usage:
+//   - To customize the output for errors (Go error values), define `error_summary` and `error_detail` templates in your config.
+//   - These templates control the summary and detail for diagnostics created from errors via Append.
+//   - If these templates are not defined, a fallback using the original error is used.
+//   - Note: All output is a diagnostic; the template name refers to the input type (error vs. diagnostic).
+func Append(ctx context.Context, diags sdkdiag.Diagnostics, err error, keyvals ...any) sdkdiag.Diagnostics {
+	Debugf("Append called with error: %v", err)
 	defer func() {
 		if r := recover(); r != nil {
-			Debugf("Panic recovered in AppendSDK: %v", r)
+			Debugf("Panic recovered in Append: %v", r)
 			// Fallback: original error summary, panic at end of detail
 			summary := firstNWords(err, 3)
 			detail := ""
@@ -85,7 +191,7 @@ func AppendSDK(ctx context.Context, diags sdkdiag.Diagnostics, err error, keyval
 		}
 	}()
 	appendCommon(ctx, func(summary, detail string) {
-		Debugf("AppendSDK add error: summary=%q detail=%q", summary, detail)
+		Debugf("Append add error: summary=%q detail=%q", summary, detail)
 		diags = append(diags, sdkdiag.Diagnostic{
 			Severity: sdkdiag.Error,
 			Summary:  summary,
@@ -95,7 +201,7 @@ func AppendSDK(ctx context.Context, diags sdkdiag.Diagnostics, err error, keyval
 	return diags
 }
 
-// appendCommon is a shared helper for AppendFW and AppendSDK that resolves and formats error messages
+// appendCommon is a shared helper for AddError and Append that resolves and formats error messages
 // using the smarterr configuration. It attempts to load configuration from the embedded filesystem and
 // the caller's directory, then builds a runtime to render the final error message. If any step fails,
 // it appends a fallback error message that always includes the original error (if present) in the summary.
@@ -125,6 +231,22 @@ func appendCommon(ctx context.Context, add func(summary, detail string), err err
 	Debugf("renderDiagnostics returned summary=%q detail=%q", summary, detail)
 	add(summary, detail)
 	emitLogTemplates(ctx, cfg, values)
+}
+
+// captureStack returns a slice of runtime.Frames for the current call stack, skipping 'skip' frames.
+func captureStack(skip int) []runtime.Frame {
+	pcs := make([]uintptr, 16)
+	n := runtime.Callers(skip, pcs)
+	frames := runtime.CallersFrames(pcs[:n])
+	var stack []runtime.Frame
+	for {
+		frame, more := frames.Next()
+		stack = append(stack, frame)
+		if !more {
+			break
+		}
+	}
+	return stack
 }
 
 // addFallbackInitError handles the fallback for missing FS.

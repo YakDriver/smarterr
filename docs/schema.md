@@ -4,6 +4,50 @@ This document describes the full configuration schema for smarterr, including al
 
 ---
 
+## Template Types and Usage
+
+smarterr supports two main template types for customizing diagnostic output:
+
+- **Error templates**: `error_summary` and `error_detail`
+  - Used when formatting diagnostics from Go errors (e.g., via `AddError` or `Append`).
+- **Diagnostic templates**: `diagnostic_summary` and `diagnostic_detail`
+  - Used when enriching framework-generated diagnostics (e.g., via `EnrichAppend`).
+
+> **Note:** All output is a diagnostic. The template name refers to the input type (error vs. diagnostic).
+
+**Function-to-template mapping:**
+- `AddError` and `Append` use `error_summary` and `error_detail`.
+- `EnrichAppend` uses `diagnostic_summary` and `diagnostic_detail`.
+
+If the relevant templates are not defined, smarterr falls back to the original error or diagnostic content.
+
+---
+
+## Call Stack Sources: Live vs Captured
+
+smarterr supports two types of call stack sources for stack matching and tokens:
+
+- **Live Call Stack**: The stack at the point where `Append`/`AddError` is called. Use with `source = "call_stack"`.
+- **Captured Call Stack**: The stack captured at the point where `NewError` or `Errorf` is called. Use with `source = "error_stack"`.
+
+This distinction allows you to match on either the reporting site or the original error site, enabling more precise and context-aware diagnostics.
+
+### Example
+
+```hcl
+token "happening" {
+  source = "call_stack"
+  stack_matches = ["create", "read", "update", "delete"]
+}
+
+token "subaction" {
+  source = "error_stack"
+  stack_matches = ["wait", "find", "set"]
+}
+```
+
+---
+
 ## Top-Level Blocks
 
 - `smarterr` (optional): Behavioral settings for error formatting and diagnostics.
@@ -74,6 +118,28 @@ template "log_error" {
 }
 ```
 
+### Template Types
+
+smarterr supports the following template types:
+
+- `error_summary`: Rendered for error summary (main error message).
+- `error_detail`: Rendered for error detail (expanded/collapsed details).
+- `diagnostic_summary`: Rendered for framework/diagnostic summary (e.g., value conversion errors).
+- `diagnostic_detail`: Rendered for framework/diagnostic detail.
+- `log_error`, `log_warn`, `log_info`: Rendered to the user-facing logger at the corresponding level.
+
+Reference:
+
+```
+template "diagnostic_summary" {
+  format = "{{.happening}} {{.service}} {{.resource}}: {{.original_summary}}"
+}
+
+template "diagnostic_detail" {
+  format = "ID: {{.identifier}}\nOriginal: {{.original_detail}}\nContext: {{.happening}} {{.service}} {{.resource}}"
+}
+```
+
 ### `token`
 
 Reference:
@@ -82,94 +148,36 @@ Reference:
 token "name" {
   parameter    = "..."   # Reference a parameter
   context      = "..."   # Pull from context.Context
-  arg          = "..."   # Pull from AppendSDK/FW args
-  source       = "..."   # "parameter" | "context" | "arg" | "error" | "call_stack" | "hints"
+  arg          = "..."   # Pull from Append/AddError args
+  source       = "..."   # "parameter" | "context" | "arg" | "error" | "call_stack" | "error_stack" | "hints" | "diagnostic"
   stack_matches = [ ... ] # Names of stack_match blocks
-  transforms   = [ ... ] # Names of transform blocks
+  transforms   = [ ... ] # Names of transform blocks (applies to string tokens)
+  field_transforms = {   # (optional) For structured tokens like diagnostic, apply transforms to fields
+    summary  = ["upper"]
+    detail   = ["lower"]
+    # ...
+  }
 }
 ```
+
+- `source = "call_stack"`: Uses the live stack at the point of error reporting.
+- `source = "error_stack"`: Uses the stack captured at the point of error creation (via `NewError`/`Errorf`).
+- `source = "diagnostic"`: Exposes a structured token with fields (e.g., `.diag.summary`, `.diag.detail`, `.diag.severity`).
+- `field_transforms`: Map of field name to list of transform names, applied to each field of a structured token.
 
 Example:
 
 ```hcl
-token "happening" {
-  stack_matches = [
-    "create",
-    "read",
-    "update",
-    "delete",
-    "read_set",
-    "read_find",
-    "create_wait"
-  ]
-}
-
-token "service" {
-  parameter = "service"
-}
-
-token "resource" {
-  context = "resource_name"
-}
-
-token "identifier" {
-  arg = "id"
-}
-
-token "clean_error" {
-  source = "error"
-  transforms = [
-    "clean_aws_error"
-  ]
-}
-
-token "error" {
-  source = "error"
-}
-
-token "suggest" {
-  source = "hints"
+token "diag" {
+  source = "diagnostic"
+  field_transforms = {
+    summary = ["upper"]
+    detail  = ["lower"]
+  }
 }
 ```
 
-### `parameter`
-
-Reference:
-
-```
-parameter "name" {
-  value = "..."
-}
-```
-
-Example:
-
-```hcl
-parameter "service" {
-  value = "CloudWatch"
-}
-```
-
-### `hint`
-
-Reference:
-
-```
-hint "name" {
-  error_contains = "..."   # Substring match on error
-  regex_match    = "..."   # Regex match on error
-  suggestion     = "..."   # Text to show if matched
-}
-```
-
-Example:
-
-```hcl
-hint "example_hint" {
-  error_contains = "InvalidParameterCombination"
-  suggestion     = "Check your AWS resource parameters."
-}
-```
+In your template, access fields as `{{.diag.summary}}`, `{{.diag.detail}}`, etc.
 
 ### `stack_match`
 
@@ -178,7 +186,6 @@ Reference:
 ```
 stack_match "name" {
   called_from  = "..."   # Regex for function name
-  called_after = "..."   # Regex for previous function in stack
   display      = "..."   # Value to use if matched
 }
 ```
@@ -206,22 +213,19 @@ stack_match "delete" {
   display     = "deleting"
 }
 
-stack_match "read_set" {
-  called_after = "Set"
-  called_from  = "resource[a-zA-Z0-9]*Read"
-  display      = "setting during read"
+stack_match "wait" {
+  called_from = "wait.*"
+  display     = "waiting during operation"
 }
 
-stack_match "read_find" {
-  called_after = "find.*"
-  called_from  = "resource[a-zA-Z0-9]*Read"
-  display      = "finding during read"
+stack_match "find" {
+  called_from = "find.*"
+  display     = "finding during operation"
 }
 
-stack_match "create_wait" {
-  called_after = "wait.*"
-  called_from  = "resource[a-zA-Z0-9]*Create"
-  display      = "waiting during creation"
+stack_match "set" {
+  called_from = "Set"
+  display     = "setting during operation"
 }
 ```
 
@@ -267,3 +271,4 @@ transform "clean_aws_error" {
 - All blocks can be layered and merged across directories.
 - See [docs/layering.md](layering.md) for details on config discovery and merging.
 - See [docs/diagnostics.md](diagnostics.md) for fallback and diagnostics behavior.
+- For advanced stack matching, see the distinction between `call_stack` and `error_stack` sources above.
