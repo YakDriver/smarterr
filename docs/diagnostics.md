@@ -1,5 +1,10 @@
 # smarterr Diagnostics & Fallbacks
 
+> **Template Types and Usage:**
+> - `AddError` and `Append` use `error_summary` and `error_detail` templates (for Go errors).
+> - `EnrichAppend` uses `diagnostic_summary` and `diagnostic_detail` templates (for framework diagnostics).
+> - All output is a diagnostic; the template name refers to the input type (error vs. diagnostic).
+
 smarterr is designed to never obscure the main error. If config is missing, broken, or a template fails, smarterr:
 
 - Always includes the original error in the output.

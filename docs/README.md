@@ -9,6 +9,23 @@ smarterr is a Go library that:
 - Produces actionable, user-friendly error summaries, details, and logs
 - Never obscures the original error, even if config is missing or broken
 
+## Template Types and Usage
+
+smarterr supports two main template types for customizing diagnostic output:
+
+- **Error templates**: `error_summary` and `error_detail`
+  - Used when formatting diagnostics from Go errors (e.g., via `AddError` or `Append`).
+- **Diagnostic templates**: `diagnostic_summary` and `diagnostic_detail`
+  - Used when enriching framework-generated diagnostics (e.g., via `EnrichAppend`).
+
+> **Note:** All output is a diagnostic. The template name refers to the input type (error vs. diagnostic).
+
+**Function-to-template mapping:**
+- `AddError` and `Append` use `error_summary` and `error_detail`.
+- `EnrichAppend` uses `diagnostic_summary` and `diagnostic_detail`.
+
+If the relevant templates are not defined, smarterr falls back to the original error or diagnostic content.
+
 ## Key Features
 - **Declarative error output:** Define error messages, details, and logs in config files
 - **Layered configs:** Merge global, parent, and local configs for flexible control

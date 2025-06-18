@@ -36,6 +36,23 @@ smarterr uses configuration—not code changes—to split an incoming error into
 
 **smarterr** lets you define, update, and standardize error output for thousands of call sites—using config, not code. Evolve your error messages and formatting without cross-codebase refactors. Both developers and users get cleaner, more actionable diagnostics.
 
+## Template Types and Usage
+
+smarterr supports two main template types for customizing diagnostic output:
+
+- **Error templates**: `error_summary` and `error_detail`
+  - Used when formatting diagnostics from Go errors (e.g., via `AddError` or `Append`).
+- **Diagnostic templates**: `diagnostic_summary` and `diagnostic_detail`
+  - Used when enriching framework-generated diagnostics (e.g., via `EnrichAppend`).
+
+> **Note:** All output is a diagnostic. The template name refers to the input type (error vs. diagnostic).
+
+**Function-to-template mapping:**
+- `AddError` and `Append` use `error_summary` and `error_detail`.
+- `EnrichAppend` uses `diagnostic_summary` and `diagnostic_detail`.
+
+If the relevant templates are not defined, smarterr falls back to the original error or diagnostic content.
+
 ## Why smarterr?
 
 - **For developers:**
@@ -75,9 +92,11 @@ smarterr uses configuration—not code changes—to split an incoming error into
 2. **Call smarterr in your error handling:**
 
    ```go
-   smarterr.AddError(ctx, diags, err, "id", id)
+   smarterr.AddError(ctx, diags, err, "id", id) // uses error_summary/error_detail
    // or for SDK diagnostics:
-   diags = smarterr.Append(ctx, diags, err, "id", id)
+   diags = smarterr.Append(ctx, diags, err, "id", id) // uses error_summary/error_detail
+   // or to enrich framework diagnostics:
+   smarterr.EnrichAppend(ctx, &diags, incoming, "id", id) // uses diagnostic_summary/diagnostic_detail
    ```
 
 ### CLI Usage (Work in Progress)
@@ -106,6 +125,10 @@ template "error_summary" {
   format = "{{.happening}} {{.service}} {{.resource}} ({{.identifier}}): {{.error}}"
 }
 
+template "diagnostic_summary" {
+  format = "{{.happening}} {{.service}} {{.resource}}: {{.diag.summary}}"
+}
+
 token "happening" {
   stack_matches = [
     "create",
@@ -129,6 +152,14 @@ token "error" {
   transforms = [
     "clean_aws_error"
   ]
+}
+
+token "diag" {
+  source = "diagnostic"
+  field_transforms = {
+    summary = ["upper"]
+    detail  = ["lower"]
+  }
 }
 
 stack_match "create" {

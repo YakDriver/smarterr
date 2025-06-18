@@ -1,5 +1,10 @@
 # smarterr Layered Configs & Merging
 
+> **Template Types and Usage:**
+> - `AddError` and `Append` use `error_summary` and `error_detail` templates (for Go errors).
+> - `EnrichAppend` uses `diagnostic_summary` and `diagnostic_detail` templates (for framework diagnostics).
+> - All output is a diagnostic; the template name refers to the input type (error vs. diagnostic).
+
 smarterr supports layered, directory-based configuration. This allows you to define global, parent, and subdirectory configs that are automatically merged for each error site.
 
 ---
