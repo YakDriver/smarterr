@@ -8,7 +8,7 @@ This document describes the full configuration schema for smarterr, including al
 
 smarterr supports two types of call stack sources for stack matching and tokens:
 
-- **Live Call Stack**: The stack at the point where `AppendSDK`/`AppendFW` is called. Use with `source = "call_stack"`.
+- **Live Call Stack**: The stack at the point where `Append`/`AddError` is called. Use with `source = "call_stack"`.
 - **Captured Call Stack**: The stack captured at the point where `NewError` or `Errorf` is called. Use with `source = "error_stack"`.
 
 This distinction allows you to match on either the reporting site or the original error site, enabling more precise and context-aware diagnostics.
@@ -129,7 +129,7 @@ Reference:
 token "name" {
   parameter    = "..."   # Reference a parameter
   context      = "..."   # Pull from context.Context
-  arg          = "..."   # Pull from AppendSDK/FW args
+  arg          = "..."   # Pull from Append/AddError args
   source       = "..."   # "parameter" | "context" | "arg" | "error" | "call_stack" | "error_stack" | "hints" | "diagnostic"
   stack_matches = [ ... ] # Names of stack_match blocks
   transforms   = [ ... ] # Names of transform blocks (applies to string tokens)

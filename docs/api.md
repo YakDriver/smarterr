@@ -113,7 +113,7 @@ if err != nil {
 return smarterr.Errorf("unexpected result for alarm %q", name)
 ```
 
-The resulting error can be passed directly to `smarterr.AppendSDK` or `smarterr.AppendFW` for config-driven formatting and diagnostics. The captured stack is used for advanced stack matching and template tokens.
+The resulting error can be passed directly to `smarterr.Append` or `smarterr.AddError` for config-driven formatting and diagnostics. The captured stack is used for advanced stack matching and template tokens.
 
 ### Error Type
 
@@ -130,19 +130,19 @@ type Error struct {
 
 ## Error Appending
 
-### AppendFW
+### AddError
 
 ```go
-func AppendFW(ctx context.Context, diags fwdiag.Diagnostics, err error, keyvals ...any)
+func AddError(ctx context.Context, diags fwdiag.Diagnostics, err error, keyvals ...any)
 ```
-Appends a formatted error to Terraform Plugin Framework diagnostics.
+Adds a formatted error to Terraform Plugin Framework diagnostics.
 
-### AppendSDK
+### Append
 
 ```go
-func AppendSDK(ctx context.Context, diags sdkdiag.Diagnostics, err error, keyvals ...any) sdkdiag.Diagnostics
+func Append(ctx context.Context, diags sdkdiag.Diagnostics, err error, keyvals ...any) sdkdiag.Diagnostics
 ```
-Appends a formatted error to Terraform Plugin SDK diagnostics and returns the updated diagnostics slice.
+Adds a formatted error to Terraform Plugin SDK diagnostics and returns the updated diagnostics slice.
 
 ---
 
@@ -162,13 +162,13 @@ smarterr uses special template names in your config to control where output goes
 - `error_detail`: Rendered to the diagnostics detail (the expanded/collapsed error details).
 - `log_error`, `log_warn`, `log_info`: Rendered to the user-facing logger (e.g., tflog or Go log) at the corresponding level.
 
-You reference these templates by name in your config. smarterr will automatically use them when you call `AppendFW` or `AppendSDK`.
+You reference these templates by name in your config. smarterr will automatically use them when you call `Append` or `AddError`.
 
 ### Example: API Call + Config
 
 **Go code:**
 ```go
-smarterr.AppendSDK(ctx, diags, err, "id", id)
+smarterr.Append(ctx, diags, err, "id", id)
 ```
 
 **Config (HCL):**

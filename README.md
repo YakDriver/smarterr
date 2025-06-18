@@ -5,7 +5,7 @@
 With a single line of code:
 
 ```go
-return smarterr.AppendSDK(ctx, diags, err, "id", "r-1234567890")
+return smarterr.Append(ctx, diags, err, "id", "r-1234567890")
 ```
 
 smarterr uses configuration—not code changes—to split an incoming error into **three output channels**:
@@ -75,9 +75,9 @@ smarterr uses configuration—not code changes—to split an incoming error into
 2. **Call smarterr in your error handling:**
 
    ```go
-   smarterr.AppendFW(ctx, diags, err, "id", id)
+   smarterr.AddError(ctx, diags, err, "id", id)
    // or for SDK diagnostics:
-   diags = smarterr.AppendSDK(ctx, diags, err, "id", id)
+   diags = smarterr.Append(ctx, diags, err, "id", id)
    ```
 
 ### CLI Usage (Work in Progress)

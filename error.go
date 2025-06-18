@@ -8,7 +8,7 @@ import (
 
 // Error is the enriched smarterr error type.
 // It wraps a base error and includes structured annotations
-// that can be used by AppendSDK/FW to construct clear, user-friendly diagnostics.
+// that can be used by Append or AddError to construct clear, user-friendly diagnostics.
 type Error struct {
 	Err           error             // The original or wrapped error
 	Message       string            // Optional developer-provided message (from Errorf)
@@ -39,7 +39,7 @@ func (e *Error) Stack() []runtime.Frame {
 // without requiring developer input, reducing fragility and promoting consistent error enrichment.
 //
 // Use NewError at the site where an error is first returned or recognized.
-// The resulting error can be passed directly to smarterr.AppendSDK or smarterr.AppendFW
+// The resulting error can be passed directly to smarterr.Append or smarterr.AddError
 // without needing manual WithField-style annotation.
 //
 // Example:
