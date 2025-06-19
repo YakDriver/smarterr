@@ -117,14 +117,14 @@ func convertConfigToHCL(cfg *internal.Config) ([]byte, error) {
 	body := file.Body()
 
 	// Smarterr block (debug, token_error_mode, hint_match_mode, hint_join_char)
-	if cfg.Smarterr != nil && (cfg.Smarterr.Debug || cfg.Smarterr.TokenErrorMode != "" || cfg.Smarterr.HintMatchMode != nil || cfg.Smarterr.HintJoinChar != nil) {
+	if cfg.Smarterr != nil && (cfg.Smarterr.Debug || (cfg.Smarterr.TokenErrorMode != nil && *cfg.Smarterr.TokenErrorMode != "") || cfg.Smarterr.HintMatchMode != nil || cfg.Smarterr.HintJoinChar != nil) {
 		smarterrBlock := body.AppendNewBlock("smarterr", nil)
 		b := smarterrBlock.Body()
 		if cfg.Smarterr.Debug {
 			b.SetAttributeValue("debug", cty.BoolVal(true))
 		}
-		if cfg.Smarterr.TokenErrorMode != "" {
-			b.SetAttributeValue("token_error_mode", cty.StringVal(cfg.Smarterr.TokenErrorMode))
+		if cfg.Smarterr.TokenErrorMode != nil && *cfg.Smarterr.TokenErrorMode != "" {
+			b.SetAttributeValue("token_error_mode", cty.StringVal(*cfg.Smarterr.TokenErrorMode))
 		}
 		if cfg.Smarterr.HintMatchMode != nil {
 			b.SetAttributeValue("hint_match_mode", cty.StringVal(*cfg.Smarterr.HintMatchMode))

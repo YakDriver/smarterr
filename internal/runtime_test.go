@@ -9,6 +9,8 @@ import (
 	"text/template"
 )
 
+func strPtr(s string) *string { return &s }
+
 func TestParseKeyvals(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -243,7 +245,7 @@ func TestConfig_RenderTemplate_BasicAndFallback(t *testing.T) {
 			Name:   "hello",
 			Format: "Hello, {{.name}}! Your id is {{.id}}.",
 		}},
-		Smarterr: &Smarterr{TokenErrorMode: "placeholder"},
+		Smarterr: &Smarterr{TokenErrorMode: strPtr("placeholder")},
 	}
 	values := map[string]any{"name": "Alice"} // id is missing
 	out, err := cfg.RenderTemplate(context.Background(), "hello", values)

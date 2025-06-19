@@ -84,6 +84,11 @@ var validateCmd = &cobra.Command{
 		allErrs = append(allErrs, errs...)
 		allWarnings = append(allWarnings, warnings...)
 
+		// --- Stack matches validation ---
+		errs, warnings = validateStackMatches(cfg)
+		allErrs = append(allErrs, errs...)
+		allWarnings = append(allWarnings, warnings...)
+
 		fmt.Println("Merged config:")
 		// Convert the configuration to HCL format
 		hclBytes, err := convertConfigToHCL(cfg)
@@ -182,6 +187,33 @@ func validateTemplateVarsAndTokens(cfg *internal.Config) (errs []error, warnings
 	for t := range tokenNames {
 		if _, ok := templateVars[t]; !ok {
 			warnings = append(warnings, fmt.Sprintf("token %q is defined but not used in any template", t))
+		}
+	}
+	return
+}
+
+// validateStackMatches checks that all stack_matches referenced by tokens exist, and warns if any stack_match is unused.
+func validateStackMatches(cfg *internal.Config) (errs []error, warnings []string) {
+	// Collect all defined stack_match names
+	defined := make(map[string]struct{})
+	for _, sm := range cfg.StackMatches {
+		defined[sm.Name] = struct{}{}
+	}
+	// Track usage of stack_matches
+	used := make(map[string]struct{})
+	for _, t := range cfg.Tokens {
+		for _, smName := range t.StackMatches {
+			if _, ok := defined[smName]; !ok {
+				errs = append(errs, fmt.Errorf("token %q references undefined stack_match %q", t.Name, smName))
+			} else {
+				used[smName] = struct{}{}
+			}
+		}
+	}
+	// Warn if any stack_match is not used
+	for smName := range defined {
+		if _, ok := used[smName]; !ok {
+			warnings = append(warnings, fmt.Sprintf("stack_match %q is defined but not used in any token's stack_matches", smName))
 		}
 	}
 	return

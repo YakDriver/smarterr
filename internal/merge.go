@@ -31,7 +31,7 @@ func mergeConfigsPair(base *Config, add *Config) {
 		if add.Smarterr.Debug {
 			base.Smarterr.Debug = true
 		}
-		if add.Smarterr.TokenErrorMode != "" {
+		if add.Smarterr.TokenErrorMode != nil && *add.Smarterr.TokenErrorMode != "" {
 			base.Smarterr.TokenErrorMode = add.Smarterr.TokenErrorMode
 		}
 	}

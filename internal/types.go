@@ -28,7 +28,7 @@ type Config struct {
 // Smarterr represents settings for how smarterr works such as debugging, token error mode, etc.
 type Smarterr struct {
 	Debug          bool    `hcl:"debug,optional"`
-	TokenErrorMode string  `hcl:"token_error_mode,optional"` // "detailed", "placeholder", "empty" (default: "empty")
+	TokenErrorMode *string `hcl:"token_error_mode,optional"` // "detailed", "placeholder", "empty" (default: "empty")
 	HintJoinChar   *string `hcl:"hint_join_char,optional"`
 	HintMatchMode  *string `hcl:"hint_match_mode,optional"` // "all" (default), "first"
 }
