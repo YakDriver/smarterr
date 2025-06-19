@@ -13,8 +13,8 @@ import (
 )
 
 func init() {
-	validateCmd.Flags().StringVar(&startDir, "start-dir", "", "Starting directory for configuration traversal (default is current directory)")
-	validateCmd.Flags().StringVar(&baseDir, "base-dir", "", "Base directory to restrict traversal (optional)")
+	validateCmd.Flags().StringVar(&startDir, "start-dir", "", "Directory where code using smarterr lives (default: current directory). This is typically where the error occurs.")
+	validateCmd.Flags().StringVar(&baseDir, "base-dir", "", "Parent directory where go:embed is used (optional, but recommended for proper config layering as in the application). If not set, config applies only to the current directory.")
 	validateCmd.Flags().BoolVar(&debugFlag, "debug", false, "Enable smarterr debug output (even if config fails to load)")
 	rootCmd.AddCommand(validateCmd)
 }
@@ -26,6 +26,9 @@ var validateCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if debugFlag {
 			internal.EnableDebugForce()
+		}
+		if baseDir == "" {
+			fmt.Println("WARNING: --base-dir is not set. Config will only apply to the current directory. For proper config layering, set --base-dir to the directory where go:embed is used in your application.")
 		}
 		// Ensure baseDir and startDir are absolute
 		absBaseDir, err := filepath.Abs(baseDir)
@@ -67,6 +70,14 @@ var validateCmd = &cobra.Command{
 			return fmt.Errorf("config validation failed")
 		}
 
+		var allErrs []error
+		var allWarnings []string
+
+		// --- Template name validation ---
+		errs, warnings := validateTemplateNames(cfg)
+		allErrs = append(allErrs, errs...)
+		allWarnings = append(allWarnings, warnings...)
+
 		fmt.Println("Merged config:")
 		// Convert the configuration to HCL format
 		hclBytes, err := convertConfigToHCL(cfg)
@@ -77,7 +88,58 @@ var validateCmd = &cobra.Command{
 		// Output the configuration
 		fmt.Println(string(hclBytes))
 
-		fmt.Println("Config loaded successfully.")
+		// Print warnings and errors
+		if len(allWarnings) > 0 {
+			fmt.Println("\nWarnings:")
+			for _, w := range allWarnings {
+				fmt.Printf("  - %s\n", w)
+			}
+		}
+		if len(allErrs) > 0 {
+			fmt.Println("\nErrors:")
+			for _, e := range allErrs {
+				fmt.Printf("  - %s\n", e)
+			}
+			return fmt.Errorf("config validation failed (%d error(s))", len(allErrs))
+		}
+
+		fmt.Println("Config loaded and validated successfully.")
 		return nil
 	},
+}
+
+// Canonical template names (should match smarterr.go)
+var canonicalTemplateNames = []string{
+	smarterr.DiagnosticSummaryKey,
+	smarterr.DiagnosticDetailKey,
+	smarterr.ErrorSummaryKey,
+	smarterr.ErrorDetailKey,
+	smarterr.LogErrorKey,
+	smarterr.LogWarnKey,
+	smarterr.LogInfoKey,
+}
+
+// validateTemplateNames checks that all template names are canonical and warns if any canonical is missing.
+func validateTemplateNames(cfg *internal.Config) (errs []error, warnings []string) {
+	templateNames := make(map[string]struct{})
+	for _, tmpl := range cfg.Templates {
+		templateNames[tmpl.Name] = struct{}{}
+		found := false
+		for _, canonical := range canonicalTemplateNames {
+			if tmpl.Name == canonical {
+				found = true
+				break
+			}
+		}
+		if !found {
+			errs = append(errs, fmt.Errorf("template %q is not a recognized canonical template name", tmpl.Name))
+		}
+	}
+	// Warn if any canonical template is missing
+	for _, canonical := range canonicalTemplateNames {
+		if _, ok := templateNames[canonical]; !ok {
+			warnings = append(warnings, fmt.Sprintf("template %q is not defined", canonical))
+		}
+	}
+	return
 }

@@ -18,8 +18,8 @@ var startDir string
 var baseDir string
 
 func init() {
-	configCmd.Flags().StringVar(&startDir, "start-dir", "", "Starting directory for configuration traversal (default is current directory)")
-	configCmd.Flags().StringVar(&baseDir, "base-dir", "", "Base directory to restrict traversal (optional)")
+	configCmd.Flags().StringVar(&startDir, "start-dir", "", "Directory where code using smarterr lives (default: current directory). This is typically where the error occurs.")
+	configCmd.Flags().StringVar(&baseDir, "base-dir", "", "Parent directory where go:embed is used (optional, but recommended for proper config layering as in the application). If not set, config applies only to the current directory.")
 	configCmd.Flags().BoolVar(&debugFlag, "debug", false, "Enable smarterr debug output (even if config fails to load)")
 	rootCmd.AddCommand(configCmd)
 }
@@ -33,6 +33,9 @@ at the specified directory path. It helps debug layered config resolution.`,
 		if debugFlag {
 			fmt.Printf("Debug mode enabled\n")
 			internal.EnableDebugForce()
+		}
+		if baseDir == "" {
+			fmt.Println("WARNING: --base-dir is not set. Config will only apply to the current directory. For proper config layering, set --base-dir to the directory where go:embed is used in your application.")
 		}
 		// Ensure baseDir and startDir are absolute
 		absBaseDir, err := filepath.Abs(baseDir)

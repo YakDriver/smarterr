@@ -17,6 +17,7 @@ var debugFlag bool
 
 func init() {
 	rootCmd.PersistentFlags().BoolVar(&debugFlag, "debug", false, "Enable smarterr debug output (even if config fails to load)")
+	rootCmd.SilenceUsage = true // Only show usage for flag errors, not for RunE errors
 }
 
 func Execute() {
