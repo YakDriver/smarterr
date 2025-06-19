@@ -18,9 +18,9 @@ var startDir string
 var baseDir string
 
 func init() {
-	configCmd.Flags().StringVar(&startDir, "start-dir", "", "Directory where code using smarterr lives (default: current directory). This is typically where the error occurs.")
-	configCmd.Flags().StringVar(&baseDir, "base-dir", "", "Parent directory where go:embed is used (optional, but recommended for proper config layering as in the application). If not set, config applies only to the current directory.")
-	configCmd.Flags().BoolVar(&debugFlag, "debug", false, "Enable smarterr debug output (even if config fails to load)")
+	configCmd.Flags().StringVarP(&startDir, "start-dir", "d", "", "Directory where code using smarterr lives (default: current directory). This is typically where the error occurs.")
+	configCmd.Flags().StringVarP(&baseDir, "base-dir", "b", "", "Parent directory where go:embed is used (optional, but recommended for proper config layering as in the application). If not set, config applies only to the current directory.")
+	configCmd.Flags().BoolVarP(&debugFlag, "debug", "D", false, "Enable smarterr debug output (even if config fails to load)")
 	rootCmd.AddCommand(configCmd)
 }
 
@@ -149,12 +149,6 @@ func convertConfigToHCL(cfg *internal.Config) ([]byte, error) {
 		}
 		if token.Context != nil {
 			b.SetAttributeValue("context", cty.StringVal(*token.Context))
-		}
-		if token.Pattern != nil {
-			b.SetAttributeValue("pattern", cty.StringVal(*token.Pattern))
-		}
-		if token.Replace != nil {
-			b.SetAttributeValue("replace", cty.StringVal(*token.Replace))
 		}
 		if len(token.Transforms) > 0 {
 			vals := make([]cty.Value, len(token.Transforms))

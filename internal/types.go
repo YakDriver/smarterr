@@ -60,8 +60,6 @@ type Token struct {
 	StackMatches    []string            `hcl:"stack_matches,optional"`
 	Arg             *string             `hcl:"arg,optional"`
 	Context         *string             `hcl:"context,optional"`
-	Pattern         *string             `hcl:"pattern,optional"`
-	Replace         *string             `hcl:"replace,optional"`
 	Transforms      []string            `hcl:"transforms,optional"`
 	FieldTransforms map[string][]string `hcl:"field_transforms,optional"`
 }
