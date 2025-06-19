@@ -10,6 +10,10 @@ const (
 	ConfigFileName = "smarterr.hcl"
 )
 
+const (
+	SmarterrContextKey = "smarterrCallID"
+)
+
 // Config represents the top-level configuration for smarterr.
 type Config struct {
 	Smarterr     *Smarterr    `hcl:"smarterr,block"`

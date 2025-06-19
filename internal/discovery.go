@@ -3,6 +3,7 @@
 package internal
 
 import (
+	"context"
 	"fmt"
 	"io/fs"
 	"os"
@@ -15,14 +16,15 @@ import (
 )
 
 // LoadConfig loads and merges configuration files from a filesystem.
-func LoadConfig(fsys FileSystem, relStackPaths []string, baseDir string) (*Config, error) {
-	Debugf("LoadConfig called with baseDir=%q relStackPaths=%v", baseDir, relStackPaths)
+func LoadConfig(ctx context.Context, fsys FileSystem, relStackPaths []string, baseDir string) (*Config, error) {
+	callID := globalCallID(ctx)
+	Debugf("[LoadConfig %s] called with baseDir=%q relStackPaths=%v", callID, baseDir, relStackPaths)
 	return loadConfigMultiStack(fsys, relStackPaths, baseDir)
 }
 
 // LoadConfigWithDiagnostics loads and merges configuration files from a filesystem, collecting diagnostics.
-func LoadConfigWithDiagnostics(fsys FileSystem, relStackPaths []string, baseDir string, diagnostics *[]error) (*Config, error) {
-	cfg, err := LoadConfig(fsys, relStackPaths, baseDir)
+func LoadConfigWithDiagnostics(ctx context.Context, fsys FileSystem, relStackPaths []string, baseDir string, diagnostics *[]error) (*Config, error) {
+	cfg, err := LoadConfig(ctx, fsys, relStackPaths, baseDir)
 	if err != nil {
 		if diagnostics != nil {
 			*diagnostics = append(*diagnostics, err)

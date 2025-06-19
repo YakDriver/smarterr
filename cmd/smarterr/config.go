@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -47,7 +48,7 @@ at the specified directory path. It helps debug layered config resolution.`,
 		}
 
 		// Load config (pass relStackPaths as []string)
-		cfg, err := internal.LoadConfig(fsys, []string{relStartDir}, ".")
+		cfg, err := internal.LoadConfig(context.Background(), fsys, []string{relStartDir}, ".")
 		if err != nil {
 			return fmt.Errorf("failed to load config: %w", err)
 		}

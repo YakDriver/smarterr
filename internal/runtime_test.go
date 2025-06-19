@@ -50,7 +50,7 @@ func TestParseKeyvals(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Call parseKeyvals
-			got := parseKeyvals(tt.input...)
+			got := parseKeyvals(context.Background(), tt.input...)
 
 			// Verify the result
 			if !reflect.DeepEqual(got, tt.want) {
@@ -72,63 +72,63 @@ func TestTokenResolve_BasicSources(t *testing.T) {
 			name:    "parameter found",
 			token:   Token{Source: "parameter", Parameter: stringPtr("foo")},
 			ctx:     context.Background(),
-			runtime: NewRuntime(&Config{Parameters: []Parameter{{Name: "foo", Value: "bar"}}}, nil, nil),
+			runtime: NewRuntime(context.Background(), &Config{Parameters: []Parameter{{Name: "foo", Value: "bar"}}}, nil, nil),
 			want:    "bar",
 		},
 		{
 			name:    "parameter not found",
 			token:   Token{Source: "parameter", Parameter: stringPtr("baz")},
 			ctx:     context.Background(),
-			runtime: NewRuntime(&Config{Parameters: []Parameter{{Name: "foo", Value: "bar"}}}, nil, nil),
+			runtime: NewRuntime(context.Background(), &Config{Parameters: []Parameter{{Name: "foo", Value: "bar"}}}, nil, nil),
 			want:    "",
 		},
 		{
 			name:    "context found",
 			token:   Token{Source: "context", Context: stringPtr("key")},
 			ctx:     context.WithValue(context.Background(), "key", "val"),
-			runtime: NewRuntime(&Config{}, nil, nil),
+			runtime: NewRuntime(context.Background(), &Config{}, nil, nil),
 			want:    "val",
 		},
 		{
 			name:    "context not found",
 			token:   Token{Source: "context", Context: stringPtr("missing")},
 			ctx:     context.WithValue(context.Background(), "key", "val"),
-			runtime: NewRuntime(&Config{}, nil, nil),
+			runtime: NewRuntime(context.Background(), &Config{}, nil, nil),
 			want:    "",
 		},
 		{
 			name:    "error present",
 			token:   Token{Source: "error"},
 			ctx:     context.Background(),
-			runtime: NewRuntime(&Config{}, fmt.Errorf("fail"), nil),
+			runtime: NewRuntime(context.Background(), &Config{}, fmt.Errorf("fail"), nil),
 			want:    "fail",
 		},
 		{
 			name:    "error absent",
 			token:   Token{Source: "error"},
 			ctx:     context.Background(),
-			runtime: NewRuntime(&Config{}, nil, nil),
+			runtime: NewRuntime(context.Background(), &Config{}, nil, nil),
 			want:    "",
 		},
 		{
 			name:    "arg found",
 			token:   Token{Source: "arg", Arg: stringPtr("foo")},
 			ctx:     context.Background(),
-			runtime: NewRuntime(&Config{}, nil, nil, "foo", "bar"),
+			runtime: NewRuntime(context.Background(), &Config{}, nil, nil, "foo", "bar"),
 			want:    "bar",
 		},
 		{
 			name:    "arg not found",
 			token:   Token{Source: "arg", Arg: stringPtr("baz")},
 			ctx:     context.Background(),
-			runtime: NewRuntime(&Config{}, nil, nil, "foo", "bar"),
+			runtime: NewRuntime(context.Background(), &Config{}, nil, nil, "foo", "bar"),
 			want:    "",
 		},
 		{
 			name:    "unknown source fallback",
 			token:   Token{Source: "unknown"},
 			ctx:     context.Background(),
-			runtime: NewRuntime(&Config{}, nil, nil),
+			runtime: NewRuntime(context.Background(), &Config{}, nil, nil),
 			want:    "",
 		},
 	}
@@ -158,7 +158,7 @@ func TestRuntime_BuildTokenValueMap(t *testing.T) {
 		},
 	}
 	err := fmt.Errorf("errVal")
-	rt := NewRuntime(cfg, err, nil, "foo", "bar")
+	rt := NewRuntime(context.Background(), cfg, err, nil, "foo", "bar")
 	got := rt.BuildTokenValueMap(ctx)
 	want := map[string]any{
 		"param_token":   "val1",
@@ -204,7 +204,7 @@ func TestTokenResolve_WithTransforms(t *testing.T) {
 		Parameter:  stringPtr("p"),
 		Transforms: []string{stripPrefix, fixSpace, toLower},
 	}
-	rt := NewRuntime(cfg, nil, nil)
+	rt := NewRuntime(context.Background(), cfg, nil, nil)
 	got := token.Resolve(context.Background(), rt)
 	want := "foo bar"
 	if got != want {
@@ -229,7 +229,7 @@ func TestTokenResolve_CallStackSource(t *testing.T) {
 			StackMatches: []string{stackMatchName},
 		}},
 	}
-	rt := NewRuntime(cfg, nil, nil)
+	rt := NewRuntime(context.Background(), cfg, nil, nil)
 	token := cfg.Tokens[0]
 	got := token.Resolve(context.Background(), rt)
 	if got != displayVal {
@@ -246,7 +246,7 @@ func TestConfig_RenderTemplate_BasicAndFallback(t *testing.T) {
 		Smarterr: &Smarterr{TokenErrorMode: "placeholder"},
 	}
 	values := map[string]any{"name": "Alice"} // id is missing
-	out, err := cfg.RenderTemplate("hello", values)
+	out, err := cfg.RenderTemplate(context.Background(), "hello", values)
 	if err != nil {
 		t.Fatalf("RenderTemplate error: %v", err)
 	}
@@ -264,7 +264,7 @@ func TestConfig_RenderTemplate_AllVarsPresent(t *testing.T) {
 		}},
 	}
 	values := map[string]any{"name": "Bob", "place": "the park"}
-	out, err := cfg.RenderTemplate("bye", values)
+	out, err := cfg.RenderTemplate(context.Background(), "bye", values)
 	if err != nil {
 		t.Fatalf("RenderTemplate error: %v", err)
 	}
@@ -278,7 +278,7 @@ func TestConfig_RenderTemplate_TemplateNotFound(t *testing.T) {
 	cfg := &Config{
 		Templates: []Template{{Name: "exists", Format: "Hi"}},
 	}
-	_, err := cfg.RenderTemplate("missing", map[string]any{})
+	_, err := cfg.RenderTemplate(context.Background(), "missing", map[string]any{})
 	if err == nil || err.Error() != "template \"missing\" not found" {
 		t.Errorf("Expected not found error, got: %v", err)
 	}
@@ -290,7 +290,7 @@ func TestConfig_RenderTemplate_SyntaxError(t *testing.T) {
 			{Name: "bad", Format: "{{.name"},
 		},
 	}
-	_, err := cfg.RenderTemplate("bad", map[string]any{"name": "X"})
+	_, err := cfg.RenderTemplate(context.Background(), "bad", map[string]any{"name": "X"})
 	if err == nil {
 		t.Errorf("Expected syntax error, got nil")
 	}
@@ -327,7 +327,7 @@ func TestTokenResolve_HintsSource(t *testing.T) {
 			{Name: "suggest", Source: "hints"},
 		},
 	}
-	rt := NewRuntime(cfg, fmt.Errorf("%s", errStr), nil)
+	rt := NewRuntime(context.Background(), cfg, fmt.Errorf("%s", errStr), nil)
 	ctx := context.Background()
 	val := cfg.Tokens[0].Resolve(ctx, rt)
 	want := "Make sure you...\nYour parameters aren't right..."
@@ -416,7 +416,7 @@ func TestTokenResolve_DiagnosticSource(t *testing.T) {
 			"detail":  {"lower"},
 		},
 	}
-	rt := NewRuntime(cfg, nil, nil, "diagnostic", diag)
+	rt := NewRuntime(context.Background(), cfg, nil, nil, "diagnostic", diag)
 	ctx := context.Background()
 	val := token.Resolve(ctx, rt)
 	diagMap, ok := val.(map[string]any)

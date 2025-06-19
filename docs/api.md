@@ -163,6 +163,26 @@ func Append(ctx context.Context, diags sdkdiag.Diagnostics, err error, keyvals .
 ```
 Adds a formatted error to Terraform Plugin SDK diagnostics and returns the updated diagnostics slice.
 
+### EnrichAppend
+
+```go
+func EnrichAppend(ctx context.Context, existing *fwdiag.Diagnostics, incoming fwdiag.Diagnostics, keyvals ...any)
+```
+
+Enriches a set of framework diagnostics (`incoming`) with smarterr configuration and appends the enriched diagnostics to `existing` (mutating in place via pointer). This is typically used to enhance framework-generated diagnostics (such as value conversion errors) with context, suggestions, or improved formatting, all driven by config.
+
+- **Templates used:** `diagnostic_summary` and `diagnostic_detail` (if defined in config)
+- If these templates are not defined, the original diagnostic summary and detail are used.
+- All output is a diagnostic; the template name refers to the input type (diagnostic).
+
+**Example usage:**
+
+```go
+smarterr.EnrichAppend(ctx, &resp.Diagnostics, incoming, smarterr.ID, req.Identity.Raw)
+```
+
+See also: [Template Types and Usage](#template-types-and-usage)
+
 ---
 
 ## Arguments
@@ -269,6 +289,34 @@ if err != nil {
 
 // Also
 return smarterr.Assert(doSomething())
+```
+
+---
+
+## Constants
+
+smarterr provides several convenience constants for use in your code and configuration. These help standardize key names and reduce typos when referencing common tokens in templates or when passing key-value pairs to smarterr functions.
+
+````go
+const (
+    ID           = "id"            // Standard key for resource or object identifier
+    ResourceName = "resource_name" // Standard key for resource name
+    ServiceName  = "service_name"  // Standard key for service name
+)
+````
+
+You can use these constants when passing key-value pairs to `AddError`, `Append`, or `EnrichAppend`, or when defining tokens in your config files. For example:
+
+```go
+smarterr.AddError(ctx, diags, err, smarterr.ID, id)
+```
+
+Or in your config:
+
+```hcl
+token "identifier" {
+  arg = "id"
+}
 ```
 
 ---
