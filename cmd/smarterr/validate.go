@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"text/template"
 
@@ -170,13 +171,7 @@ func validateTemplateNames(cfg *internal.Config) (errs []error, warnings []strin
 	templateNames := make(map[string]struct{})
 	for _, tmpl := range cfg.Templates {
 		templateNames[tmpl.Name] = struct{}{}
-		found := false
-		for _, canonical := range canonicalTemplateNames {
-			if tmpl.Name == canonical {
-				found = true
-				break
-			}
-		}
+		found := slices.Contains(canonicalTemplateNames, tmpl.Name)
 		if !found {
 			errs = append(errs, fmt.Errorf("template %q is not a recognized canonical template name", tmpl.Name))
 		}

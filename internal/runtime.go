@@ -102,8 +102,8 @@ func applyStripPrefix(value string, step TransformStep) string {
 	}
 	if step.Recurse != nil && *step.Recurse {
 		for {
-			if strings.HasPrefix(value, *step.Value) {
-				value = strings.TrimPrefix(value, *step.Value)
+			if after, ok := strings.CutPrefix(value, *step.Value); ok {
+				value = after
 				value = strings.TrimSpace(value)
 				continue
 			}
@@ -111,8 +111,8 @@ func applyStripPrefix(value string, step TransformStep) string {
 		}
 		return value
 	}
-	if strings.HasPrefix(value, *step.Value) {
-		value = strings.TrimPrefix(value, *step.Value)
+	if after, ok := strings.CutPrefix(value, *step.Value); ok {
+		value = after
 		value = strings.TrimSpace(value)
 	}
 	return value
@@ -197,7 +197,7 @@ func applyReplace(value string, step TransformStep) string {
 
 func globalCallID(ctx context.Context) string {
 	var callID string
-	if v := ctx.Value(interface{}("smarterrCallID")); v != nil {
+	if v := ctx.Value(any("smarterrCallID")); v != nil {
 		callID, _ = v.(string)
 	}
 	return callID
