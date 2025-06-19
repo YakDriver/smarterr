@@ -569,7 +569,7 @@ func (cfg *Config) RenderTemplate(ctx context.Context, name string, values map[s
 	}
 
 	// Scan the template AST for all referenced variables
-	vars := collectTemplateVariables(tmpl)
+	vars := CollectTemplateVariables(tmpl)
 	// Pre-populate missing values with fallback
 	for _, v := range vars {
 		if _, ok := values[v]; !ok {
@@ -586,8 +586,8 @@ func (cfg *Config) RenderTemplate(ctx context.Context, name string, values map[s
 	return buf.String(), nil
 }
 
-// collectTemplateVariables walks the template AST and returns a list of all variable names referenced.
-func collectTemplateVariables(tmpl *template.Template) []string {
+// CollectTemplateVariables walks the template AST and returns a list of all variable names referenced.
+func CollectTemplateVariables(tmpl *template.Template) []string {
 	vars := make(map[string]struct{})
 	for _, t := range tmpl.Templates() {
 		walkNodes(t.Tree.Root, vars)

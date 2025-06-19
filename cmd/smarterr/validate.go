@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"text/template"
 
 	"github.com/YakDriver/smarterr"
 	"github.com/YakDriver/smarterr/internal"
@@ -78,6 +79,11 @@ var validateCmd = &cobra.Command{
 		allErrs = append(allErrs, errs...)
 		allWarnings = append(allWarnings, warnings...)
 
+		// --- Template vars and tokens validation ---
+		errs, warnings = validateTemplateVarsAndTokens(cfg)
+		allErrs = append(allErrs, errs...)
+		allWarnings = append(allWarnings, warnings...)
+
 		fmt.Println("Merged config:")
 		// Convert the configuration to HCL format
 		hclBytes, err := convertConfigToHCL(cfg)
@@ -139,6 +145,43 @@ func validateTemplateNames(cfg *internal.Config) (errs []error, warnings []strin
 	for _, canonical := range canonicalTemplateNames {
 		if _, ok := templateNames[canonical]; !ok {
 			warnings = append(warnings, fmt.Sprintf("template %q is not defined", canonical))
+		}
+	}
+	return
+}
+
+// validateTemplateVarsAndTokens checks for template vars without tokens (error) and tokens unused in templates (warning).
+func validateTemplateVarsAndTokens(cfg *internal.Config) (errs []error, warnings []string) {
+	tokenNames := make(map[string]struct{})
+	for _, t := range cfg.Tokens {
+		tokenNames[t.Name] = struct{}{}
+	}
+
+	// Collect all template variables used in all templates
+	templateVars := make(map[string]struct{})
+	for _, tmpl := range cfg.Templates {
+		t, err := template.New(tmpl.Name).Parse(tmpl.Format)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("failed to parse template %q: %v", tmpl.Name, err))
+			continue
+		}
+		vars := internal.CollectTemplateVariables(t)
+		for _, v := range vars {
+			templateVars[v] = struct{}{}
+		}
+	}
+
+	// Error: template var exists that doesn't correspond to a token
+	for v := range templateVars {
+		if _, ok := tokenNames[v]; !ok {
+			errs = append(errs, fmt.Errorf("template variable %q is used in a template but no token with that name exists", v))
+		}
+	}
+
+	// Warning: token exists that's not used in a template
+	for t := range tokenNames {
+		if _, ok := templateVars[t]; !ok {
+			warnings = append(warnings, fmt.Sprintf("token %q is defined but not used in any template", t))
 		}
 	}
 	return

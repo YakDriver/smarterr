@@ -301,7 +301,7 @@ func TestCollectTemplateVariables(t *testing.T) {
 	if err != nil {
 		t.Fatalf("template parse error: %v", err)
 	}
-	vars := collectTemplateVariables(tmpl)
+	vars := CollectTemplateVariables(tmpl)
 	want := map[string]bool{"foo": true, "bar": true, "baz": true}
 	for _, v := range vars {
 		if !want[v] {
