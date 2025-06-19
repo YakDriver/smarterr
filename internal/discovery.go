@@ -19,7 +19,7 @@ import (
 func LoadConfig(ctx context.Context, fsys FileSystem, relStackPaths []string, baseDir string) (*Config, error) {
 	callID := globalCallID(ctx)
 	Debugf("[LoadConfig %s] called with baseDir=%q relStackPaths=%v", callID, baseDir, relStackPaths)
-	return loadConfigMultiStack(fsys, relStackPaths, baseDir)
+	return loadConfigMultiStack(ctx, fsys, relStackPaths, baseDir)
 }
 
 // LoadConfigWithDiagnostics loads and merges configuration files from a filesystem, collecting diagnostics.
@@ -36,35 +36,40 @@ func LoadConfigWithDiagnostics(ctx context.Context, fsys FileSystem, relStackPat
 // loadConfigMultiStack is the internal implementation for loading and merging config files
 // based on multiple stack paths. This is optimized for embedded FS, but can be adapted for
 // real FS in the future.
-func loadConfigMultiStack(fsys FileSystem, relStackPaths []string, baseDir string) (*Config, error) {
-	configs, err := collectConfigsForStack(fsys, relStackPaths, baseDir)
+func loadConfigMultiStack(ctx context.Context, fsys FileSystem, relStackPaths []string, baseDir string) (*Config, error) {
+	callID := globalCallID(ctx)
+	Debugf("[loadConfigMultiStack %s] called with baseDir=%q relStackPaths=%v", callID, baseDir, relStackPaths)
+	configs, err := collectConfigsForStack(ctx, fsys, relStackPaths, baseDir)
 	if err != nil {
 		return nil, err
 	}
 	if len(configs) == 0 {
 		return &Config{}, nil
 	}
-	merged := mergeConfigs(configs)
+	merged := mergeConfigs(ctx, configs)
 	EnableDebug(merged) // Enable internal debug output based on config
 	return merged, nil
 }
 
 // collectConfigsForStack collects and loads all config files relevant to the provided stack paths.
 // This is the main entry for config discovery in embedded FS mode.
-func collectConfigsForStack(fsys FileSystem, relStackPaths []string, baseDir string) ([]*Config, error) {
+func collectConfigsForStack(ctx context.Context, fsys FileSystem, relStackPaths []string, baseDir string) ([]*Config, error) {
+	callID := globalCallID(ctx)
+	Debugf("[collectConfigsForStack %s] called with baseDir=%q relStackPaths=%v", callID, baseDir, relStackPaths)
+	// Find all config files in
 	type configWithPath struct {
 		cfg  *Config
 		path string
 	}
 	var cfgsWithPaths []configWithPath
-	globalConfigPath, candidateConfigs, err := findAllConfigPaths(fsys)
+	globalConfigPath, candidateConfigs, err := findAllConfigPaths(ctx, fsys)
 	if err != nil {
 		return nil, err
 	}
 
 	// Always include the global config if present
 	if globalConfigPath != "" {
-		cfg, err := loadConfigFile(fsys, globalConfigPath)
+		cfg, err := loadConfigFile(ctx, fsys, globalConfigPath)
 		if err != nil {
 			return nil, fmt.Errorf("error loading global config: %w", err)
 		}
@@ -73,17 +78,24 @@ func collectConfigsForStack(fsys FileSystem, relStackPaths []string, baseDir str
 
 	sep := string(filepath.Separator)
 	for _, configPath := range candidateConfigs {
+		Debugf("[collectConfigsForStack %s] checking candidate config %q", callID, configPath)
 		configDir := filepath.Dir(configPath)
 		needle := baseDir + sep + configDir
+		if baseDir == "." {
+			needle = configDir
+		}
 		for _, stackPath := range relStackPaths {
 			if strings.Contains(stackPath, needle) {
-				cfg, err := loadConfigFile(fsys, configPath)
+				cfg, err := loadConfigFile(ctx, fsys, configPath)
 				if err != nil {
+					Debugf("[collectConfigsForStack %s] error loading config %s: %v", callID, configPath, err)
 					return nil, fmt.Errorf("error loading config %s: %w", configPath, err)
 				}
 				cfgsWithPaths = append(cfgsWithPaths, configWithPath{cfg, configPath})
+				Debugf("[collectConfigsForStack %s] matched config %q for stack path %q", callID, configPath, stackPath)
 				break // Only need to match once per config
 			}
+			Debugf("[collectConfigsForStack %s] config %q did not match, stackPath (%s) does not contain needle (%s)", callID, configPath, stackPath, needle)
 		}
 	}
 	// Sort by path depth (least specific first, most specific last)
@@ -98,7 +110,9 @@ func collectConfigsForStack(fsys FileSystem, relStackPaths []string, baseDir str
 }
 
 // findAllConfigPaths scans the FS for all smarterr.hcl files, returning the global config path and other candidates.
-func findAllConfigPaths(fsys FileSystem) (globalConfig string, candidateConfigs []string, err error) {
+func findAllConfigPaths(ctx context.Context, fsys FileSystem) (globalConfig string, candidateConfigs []string, err error) {
+	callID := globalCallID(ctx)
+	Debugf("[findAllConfigPaths %s] scanning filesystem for config files", callID)
 	err = fsys.WalkDir(".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return nil
@@ -113,11 +127,14 @@ func findAllConfigPaths(fsys FileSystem) (globalConfig string, candidateConfigs 
 		}
 		return nil
 	})
+	Debugf("[findAllConfigPaths %s] found globalConfig=%q candidateConfigs=%v", callID, globalConfig, candidateConfigs)
 	return
 }
 
 // loadConfigFile loads a single config file from the FS and parses it into a Config struct.
-func loadConfigFile(fsys FileSystem, path string) (*Config, error) {
+func loadConfigFile(ctx context.Context, fsys FileSystem, path string) (*Config, error) {
+	callID := globalCallID(ctx)
+	Debugf("[loadConfigFile %s] loading config file %q", callID, path)
 	parser := hclparse.NewParser()
 	fileBytes, err := fsys.ReadFile(path)
 	if err != nil {

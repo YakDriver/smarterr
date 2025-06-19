@@ -20,12 +20,25 @@ var (
 	// globalDebugOutput is the writer for internal debug output.
 	globalDebugOutput io.Writer = os.Stderr
 	debugMutex        sync.Mutex
+	forceDebug        bool
 )
+
+// EnableDebugForce ...
+func EnableDebugForce() {
+	debugMutex.Lock()
+	globalDebugEnabled = true
+	forceDebug = true
+	debugMutex.Unlock()
+}
 
 // EnableDebug sets up internal debug output based on the Smarterr block in config.
 func EnableDebug(cfg *Config) {
 	debugMutex.Lock()
 	defer debugMutex.Unlock()
+	if forceDebug {
+		globalDebugEnabled = true
+		return
+	}
 	if cfg != nil && cfg.Smarterr != nil && cfg.Smarterr.Debug {
 		globalDebugEnabled = true
 		// Always use stderr for now; can extend later if needed

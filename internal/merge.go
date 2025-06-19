@@ -2,8 +2,12 @@
 // Config merging logic for smarterr
 package internal
 
+import "context"
+
 // mergeConfigs merges a slice of Configs, from least to most specific.
-func mergeConfigs(configs []*Config) *Config {
+func mergeConfigs(ctx context.Context, configs []*Config) *Config {
+	callID := globalCallID(ctx)
+	Debugf("[mergeConfigs %s] called with %d configs", callID, len(configs))
 	if len(configs) == 0 {
 		return &Config{}
 	}
