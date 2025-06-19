@@ -36,7 +36,7 @@ jobs:
 
       - name: Check Go formatting
         run: |
-          fmt_out=$(gofmt -s -d ./...)
+          fmt_out=$(find . -name '*.go' -print0 | xargs -0 gofmt -s -d)
           if [ -n "$fmt_out" ]; then
             echo "$fmt_out"
             echo 'Code is not gofmt formatted. Run `make fmt`.'
