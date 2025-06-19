@@ -49,8 +49,9 @@ func NewRuntimeForDiagnostic(ctx context.Context, cfg *Config, diagnostic diag.D
 		Debugf("[NewRuntimeForDiagnostic %s] Runtime configuration is nil", callID)
 	}
 	if diagnostic != nil {
-		Debugf("[NewRuntimeForDiagnostic %s] Runtime initialized with diagnostic: %v", callID, diagnostic)
+		Debugf("[NewRuntimeForDiagnostic %s] Runtime initialized with args (%+v) and diagnostic: %v", callID, args, diagnostic)
 	}
+
 	return &Runtime{
 		Config:     cfg,
 		Diagnostic: diagnostic,

@@ -23,6 +23,10 @@ const (
 	LogErrorKey          = "log_error"
 	LogWarnKey           = "log_warn"
 	LogInfoKey           = "log_info"
+
+	ErrorSeverity   = "Error"
+	WarningSeverity = "Warning"
+	InfoSeverity    = "Info"
 )
 
 const (
@@ -58,10 +62,6 @@ func SetFS(fs FileSystem, baseDir string) {
 //   - Note: All output is a diagnostic; the template name refers to the input type (error vs. diagnostic).
 func EnrichAppend(ctx context.Context, existing *fwdiag.Diagnostics, incoming fwdiag.Diagnostics, keyvals ...any) {
 	ctx, callID := globalCallID(ctx)
-
-	for i := range keyvals {
-		fmt.Printf("keyvals[%d]: %v\n", i, keyvals[i])
-	}
 
 	// Debug will NOT be output until LoadConfigWithDiagnostics + the setting in the config
 	// enables it because without config we don't know if debug is enabled. Subsequent
@@ -133,6 +133,11 @@ func EnrichAppend(ctx context.Context, existing *fwdiag.Diagnostics, incoming fw
 			continue
 		}
 		existing.Append(enriched)
+
+		// Emit log for this diagnostic's severity
+		if diag.Severity().String() == ErrorSeverity || diag.Severity().String() == WarningSeverity || diag.Severity().String() == InfoSeverity {
+			emitLogTemplates(ctx, cfg, values, diag.Severity().String())
+		}
 	}
 }
 
@@ -264,7 +269,7 @@ func appendCommon(ctx context.Context, add func(summary, detail string), err err
 	summary, detail := renderDiagnostics(ctx, cfg, err, values)
 	Debugf("[appendCommon %s] renderDiagnostics returned summary=%q detail=%q", callID, summary, detail)
 	add(summary, detail)
-	emitLogTemplates(ctx, cfg, values)
+	emitLogTemplates(ctx, cfg, values, ErrorSeverity)
 }
 
 // captureStack returns a slice of runtime.Frames for the current call stack, skipping 'skip' frames.
@@ -368,24 +373,34 @@ func renderDiagnostics(ctx context.Context, cfg *internal.Config, err error, val
 }
 
 // emitLogTemplates checks for log_error, log_warn, and log_info templates and emits logs if present.
-func emitLogTemplates(ctx context.Context, cfg *internal.Config, values map[string]any) {
+func emitLogTemplates(ctx context.Context, cfg *internal.Config, values map[string]any, severity string) {
 	ctx, callID := globalCallID(ctx)
-	Debugf("[emitLogTemplates %s] called", callID)
+	Debugf("[emitLogTemplates %s] called with severity: %s", callID, severity)
 	if globalLogger == nil {
 		Debugf("[emitLogTemplates %s] No globalLogger set; skipping user-facing log emission")
 		return
 	}
-	if tmpl, err := cfg.RenderTemplate(ctx, LogErrorKey, values); err == nil && tmpl != "" {
-		Debugf("[emitLogTemplates %s] Emitting user-facing log_error: %q", tmpl)
-		globalLogger.Error(ctx, tmpl, values)
+	var key string
+	switch severity {
+	case ErrorSeverity:
+		key = LogErrorKey
+	case WarningSeverity:
+		key = LogWarnKey
+	case InfoSeverity:
+		key = LogInfoKey
+	default:
+		return
 	}
-	if tmpl, err := cfg.RenderTemplate(ctx, LogWarnKey, values); err == nil && tmpl != "" {
-		Debugf("[emitLogTemplates %s] Emitting user-facing log_warn: %q", tmpl)
-		globalLogger.Warn(ctx, tmpl, values)
-	}
-	if tmpl, err := cfg.RenderTemplate(ctx, LogInfoKey, values); err == nil && tmpl != "" {
-		Debugf("[emitLogTemplates %s] Emitting user-facing log_info: %q", tmpl)
-		globalLogger.Info(ctx, tmpl, values)
+	if tmpl, err := cfg.RenderTemplate(ctx, key, values); err == nil && tmpl != "" {
+		Debugf("[emitLogTemplates %s] Emitting user-facing %s: %q", callID, key, tmpl)
+		switch severity {
+		case ErrorSeverity:
+			globalLogger.Error(ctx, tmpl, values)
+		case WarningSeverity:
+			globalLogger.Warn(ctx, tmpl, values)
+		case InfoSeverity:
+			globalLogger.Info(ctx, tmpl, values)
+		}
 	}
 }
 
