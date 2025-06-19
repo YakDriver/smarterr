@@ -7,6 +7,8 @@ import (
 	"runtime"
 	"testing"
 	"text/template"
+
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 )
 
 func strPtr(s string) *string { return &s }
@@ -116,14 +118,14 @@ func TestTokenResolve_BasicSources(t *testing.T) {
 			name:    "arg found",
 			token:   Token{Source: "arg", Arg: stringPtr("foo")},
 			ctx:     context.Background(),
-			runtime: NewRuntime(context.Background(), &Config{}, nil, nil, "foo", "bar"),
+			runtime: NewRuntime(context.Background(), &Config{}, nil, "foo", "bar"),
 			want:    "bar",
 		},
 		{
 			name:    "arg not found",
 			token:   Token{Source: "arg", Arg: stringPtr("baz")},
 			ctx:     context.Background(),
-			runtime: NewRuntime(context.Background(), &Config{}, nil, nil, "foo", "bar"),
+			runtime: NewRuntime(context.Background(), &Config{}, nil, "foo", "bar"),
 			want:    "",
 		},
 		{
@@ -160,7 +162,7 @@ func TestRuntime_BuildTokenValueMap(t *testing.T) {
 		},
 	}
 	err := fmt.Errorf("errVal")
-	rt := NewRuntime(context.Background(), cfg, err, nil, "foo", "bar")
+	rt := NewRuntime(context.Background(), cfg, err, "foo", "bar")
 	got := rt.BuildTokenValueMap(ctx)
 	want := map[string]any{
 		"param_token":   "val1",
@@ -392,12 +394,19 @@ func TestProcessStackMatches_CalledFromPreference(t *testing.T) {
 	}
 }
 
+type mockDiag struct{}
+type Severity int
+
+func (Severity) String() string {
+	return SeverityError
+}
+
+func (mockDiag) Summary() string            { return "Something went wrong" }
+func (mockDiag) Detail() string             { return "A detailed explanation" }
+func (mockDiag) Severity() diag.Severity    { return 1 }
+func (mockDiag) Equal(diag.Diagnostic) bool { return true }
+
 func TestTokenResolve_DiagnosticSource(t *testing.T) {
-	diag := map[string]string{
-		"summary":  "Something went wrong",
-		"detail":   "A detailed explanation",
-		"severity": "ERROR",
-	}
 	cfg := &Config{
 		Transforms: []Transform{
 			{
@@ -418,7 +427,7 @@ func TestTokenResolve_DiagnosticSource(t *testing.T) {
 			"detail":  {"lower"},
 		},
 	}
-	rt := NewRuntime(context.Background(), cfg, nil, nil, "diagnostic", diag)
+	rt := NewRuntimeForDiagnostic(context.Background(), cfg, mockDiag{})
 	ctx := context.Background()
 	val := token.Resolve(ctx, rt)
 	diagMap, ok := val.(map[string]any)
@@ -431,7 +440,7 @@ func TestTokenResolve_DiagnosticSource(t *testing.T) {
 	if diagMap["detail"] != "a detailed explanation" {
 		t.Errorf("detail transform failed: got %q, want %q", diagMap["detail"], "a detailed explanation")
 	}
-	if diagMap["severity"] != "ERROR" {
-		t.Errorf("severity should be unchanged: got %q, want %q", diagMap["severity"], "ERROR")
+	if diagMap["severity"] != "Error" {
+		t.Errorf("severity should be unchanged: got %q, want %q", diagMap["severity"], "Error")
 	}
 }

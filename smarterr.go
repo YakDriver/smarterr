@@ -24,9 +24,9 @@ const (
 	LogWarnKey           = "log_warn"
 	LogInfoKey           = "log_info"
 
-	ErrorSeverity   = "Error"
-	WarningSeverity = "Warning"
-	InfoSeverity    = "Info"
+	SeverityError   = internal.SeverityError
+	SeverityWarning = internal.SeverityWarning
+	SeverityInfo    = internal.SeverityInfo
 )
 
 const (
@@ -135,7 +135,7 @@ func EnrichAppend(ctx context.Context, existing *fwdiag.Diagnostics, incoming fw
 		existing.Append(enriched)
 
 		// Emit log for this diagnostic's severity
-		if diag.Severity().String() == ErrorSeverity || diag.Severity().String() == WarningSeverity || diag.Severity().String() == InfoSeverity {
+		if diag.Severity().String() == SeverityError || diag.Severity().String() == SeverityWarning || diag.Severity().String() == SeverityInfo {
 			emitLogTemplates(ctx, cfg, values, diag.Severity().String())
 		}
 	}
@@ -269,7 +269,7 @@ func appendCommon(ctx context.Context, add func(summary, detail string), err err
 	summary, detail := renderDiagnostics(ctx, cfg, err, values)
 	Debugf("[appendCommon %s] renderDiagnostics returned summary=%q detail=%q", callID, summary, detail)
 	add(summary, detail)
-	emitLogTemplates(ctx, cfg, values, ErrorSeverity)
+	emitLogTemplates(ctx, cfg, values, SeverityError)
 }
 
 // captureStack returns a slice of runtime.Frames for the current call stack, skipping 'skip' frames.
@@ -382,11 +382,11 @@ func emitLogTemplates(ctx context.Context, cfg *internal.Config, values map[stri
 	}
 	var key string
 	switch severity {
-	case ErrorSeverity:
+	case SeverityError:
 		key = LogErrorKey
-	case WarningSeverity:
+	case SeverityWarning:
 		key = LogWarnKey
-	case InfoSeverity:
+	case SeverityInfo:
 		key = LogInfoKey
 	default:
 		return
@@ -394,11 +394,11 @@ func emitLogTemplates(ctx context.Context, cfg *internal.Config, values map[stri
 	if tmpl, err := cfg.RenderTemplate(ctx, key, values); err == nil && tmpl != "" {
 		Debugf("[emitLogTemplates %s] Emitting user-facing %s: %q", callID, key, tmpl)
 		switch severity {
-		case ErrorSeverity:
+		case SeverityError:
 			globalLogger.Error(ctx, tmpl, values)
-		case WarningSeverity:
+		case SeverityWarning:
 			globalLogger.Warn(ctx, tmpl, values)
-		case InfoSeverity:
+		case SeverityInfo:
 			globalLogger.Info(ctx, tmpl, values)
 		}
 	}

@@ -16,6 +16,12 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 )
 
+const (
+	SeverityError   = "Error"
+	SeverityWarning = "Warning"
+	SeverityInfo    = "Info"
+)
+
 type Runtime struct {
 	Config     *Config
 	Args       map[string]any
