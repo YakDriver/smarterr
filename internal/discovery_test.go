@@ -41,7 +41,7 @@ func TestLoadConfig_Simple(t *testing.T) {
 	}
 	baseDir := "internal"
 
-	cfg, err := LoadConfig(fsys, relStackPaths, baseDir)
+	cfg, err := LoadConfig(context.Background(), fsys, relStackPaths, baseDir)
 	if err != nil {
 		t.Fatalf("LoadConfig error: %v", err)
 	}
@@ -69,7 +69,7 @@ func TestLoadConfig_ExtraConfigNotIncluded(t *testing.T) {
 	}
 	baseDir := "internal"
 
-	cfg, err := LoadConfig(fsys, relStackPaths, baseDir)
+	cfg, err := LoadConfig(context.Background(), fsys, relStackPaths, baseDir)
 	if err != nil {
 		t.Fatalf("LoadConfig error: %v", err)
 	}
@@ -114,14 +114,14 @@ parameter "bar" {
 	}
 	baseDir := "internal"
 
-	cfg, err := LoadConfig(fsys, relStackPaths, baseDir)
+	cfg, err := LoadConfig(context.Background(), fsys, relStackPaths, baseDir)
 	if err != nil {
 		t.Fatalf("LoadConfig error: %v", err)
 	}
 	if len(cfg.Tokens) != 1 {
 		t.Fatalf("expected 1 token, got %d", len(cfg.Tokens))
 	}
-	rt := NewRuntime(cfg, nil, nil)
+	rt := NewRuntime(context.Background(), cfg, nil, nil)
 	val := cfg.Tokens[0].Resolve(context.Background(), rt)
 	if val != "child" {
 		t.Errorf("expected resolved token value 'child', got: %q", val)

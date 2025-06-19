@@ -2,7 +2,9 @@ package smarterr
 
 import (
 	"context"
+	"fmt"
 	"runtime"
+	"sync/atomic"
 
 	"github.com/YakDriver/smarterr/internal"
 	fwdiag "github.com/hashicorp/terraform-plugin-framework/diag"
@@ -13,6 +15,18 @@ const (
 	ID           = "id"
 	ResourceName = "resource_name"
 	ServiceName  = "service_name"
+
+	DiagnosticSummaryKey = "diagnostic_summary"
+	DiagnosticDetailKey  = "diagnostic_detail"
+	ErrorSummaryKey      = "error_summary"
+	ErrorDetailKey       = "error_detail"
+	LogErrorKey          = "log_error"
+	LogWarnKey           = "log_warn"
+	LogInfoKey           = "log_info"
+)
+
+const (
+	smarterrContextKey = internal.SmarterrContextKey
 )
 
 // Re-export internal.Debugf for internal debugging
@@ -22,6 +36,8 @@ var (
 	wrappedFS      FileSystem
 	wrappedBaseDir string
 )
+
+var glblCallID atomic.Uint64 // atomic counter for tracing
 
 // SetFS allows the host application to provide a FileSystem implementation and the base directory for path normalization.
 func SetFS(fs FileSystem, baseDir string) {
@@ -41,9 +57,15 @@ func SetFS(fs FileSystem, baseDir string) {
 //   - If these templates are not defined, the original diagnostic summary and detail are used.
 //   - Note: All output is a diagnostic; the template name refers to the input type (error vs. diagnostic).
 func EnrichAppend(ctx context.Context, existing *fwdiag.Diagnostics, incoming fwdiag.Diagnostics, keyvals ...any) {
+	ctx, callID := globalCallID(ctx)
+
+	// Debug will NOT be output until LoadConfigWithDiagnostics + the setting in the config
+	// enables it because it without config we don't know if debug is enabled. Subsequent
+	// calls after config load will show debug if enabled.
+	Debugf("[EnrichAppend %s] called with len(incoming): %d, keyvals: %v", callID, len(incoming), keyvals)
 	defer func() {
 		if r := recover(); r != nil {
-			Debugf("Panic recovered in EnrichAppend: %v", r)
+			Debugf("[EnrichAppend %s] Panic recovered: %v", callID, r)
 			// Fallback: append all incoming diags not already in existing
 			for _, diag := range incoming {
 				if diag == nil || existing.Contains(diag) {
@@ -58,7 +80,7 @@ func EnrichAppend(ctx context.Context, existing *fwdiag.Diagnostics, incoming fw
 	}
 	// Load config once
 	if wrappedFS == nil {
-		Debugf("No wrappedFS set; cannot enrich diagnostics")
+		Debugf("[EnrichAppend %s] No wrappedFS set; cannot enrich diagnostics", callID)
 		for _, diag := range incoming {
 			if diag == nil || existing.Contains(diag) {
 				continue
@@ -67,11 +89,11 @@ func EnrichAppend(ctx context.Context, existing *fwdiag.Diagnostics, incoming fw
 		}
 		return
 	}
-	relStackPaths := collectRelStackPaths(wrappedBaseDir)
+	relStackPaths := collectRelStackPaths(ctx, wrappedBaseDir)
 	var diagnostics []error
-	cfg, cfgErr := internal.LoadConfigWithDiagnostics(wrappedFS, relStackPaths, wrappedBaseDir, &diagnostics)
+	cfg, cfgErr := internal.LoadConfigWithDiagnostics(ctx, wrappedFS, relStackPaths, wrappedBaseDir, &diagnostics)
 	if cfgErr != nil {
-		Debugf("Config load error: %v", cfgErr)
+		Debugf("[EnrichAppend %s] Config load error: %v", callID, cfgErr)
 		for _, diag := range incoming {
 			if diag == nil || existing.Contains(diag) {
 				continue
@@ -81,6 +103,7 @@ func EnrichAppend(ctx context.Context, existing *fwdiag.Diagnostics, incoming fw
 		return
 	}
 
+	Debugf("[EnrichAppend %s] diagnostics, len(incoming): %d", callID, len(incoming))
 	for _, diag := range incoming {
 		if diag == nil {
 			continue
@@ -89,20 +112,21 @@ func EnrichAppend(ctx context.Context, existing *fwdiag.Diagnostics, incoming fw
 		if existing.Contains(diag) {
 			continue
 		}
+		Debugf("[EnrichAppend %s] enriching diagnostic: %+v", callID, diag)
 		// Enrich: build runtime with diagnostic as a token arg
 		diagMap := map[string]string{
 			"summary":  diag.Summary(),
 			"detail":   diag.Detail(),
 			"severity": diag.Severity().String(),
 		}
-		rt := internal.NewRuntimeWithDiagnostics(cfg, nil, nil, &diagnostics, append(keyvals, "diagnostic", diagMap)...)
+		rt := internal.NewRuntimeWithDiagnostics(ctx, cfg, nil, nil, &diagnostics, append(keyvals, "diagnostic", diagMap)...)
 		values := rt.BuildTokenValueMap(ctx)
 		// Render summary/detail using diagnostic templates if present, else fallback to original
 		summary, detail := diag.Summary(), diag.Detail()
-		if s, err := cfg.RenderTemplate("diagnostic_summary", values); err == nil && s != "" {
+		if s, err := cfg.RenderTemplate(ctx, DiagnosticSummaryKey, values); err == nil && s != "" {
 			summary = s
 		}
-		if d, err := cfg.RenderTemplate("diagnostic_detail", values); err == nil && d != "" {
+		if d, err := cfg.RenderTemplate(ctx, DiagnosticDetailKey, values); err == nil && d != "" {
 			detail = d
 		}
 		// Create enriched diagnostic
@@ -124,10 +148,11 @@ func EnrichAppend(ctx context.Context, existing *fwdiag.Diagnostics, incoming fw
 //   - If these templates are not defined, a fallback using the original error is used.
 //   - Note: All output is a diagnostic; the template name refers to the input type (error vs. diagnostic).
 func AddError(ctx context.Context, diags *fwdiag.Diagnostics, err error, keyvals ...any) {
-	Debugf("AddError called with error: %v", err)
+	ctx, callID := globalCallID(ctx)
+	Debugf("[AddError %s] called with error: %v", callID, err)
 	defer func() {
 		if r := recover(); r != nil {
-			Debugf("Panic recovered in AddError: %v", r)
+			Debugf("[AddError %s] Panic recovered: %v", callID, r)
 			// Fallback: original error summary, panic at end of detail
 			summary := firstNWords(err, 3)
 			detail := ""
@@ -149,7 +174,7 @@ func AddError(ctx context.Context, diags *fwdiag.Diagnostics, err error, keyvals
 		}
 	}()
 	appendCommon(ctx, func(summary, detail string) {
-		Debugf("AddError add error: summary=%q detail=%q", summary, detail)
+		Debugf("[AddError %s] add error: summary=%q detail=%q", callID, summary, detail)
 		diags.AddError(summary, detail)
 	}, err, keyvals...)
 }
@@ -162,10 +187,11 @@ func AddError(ctx context.Context, diags *fwdiag.Diagnostics, err error, keyvals
 //   - If these templates are not defined, a fallback using the original error is used.
 //   - Note: All output is a diagnostic; the template name refers to the input type (error vs. diagnostic).
 func Append(ctx context.Context, diags sdkdiag.Diagnostics, err error, keyvals ...any) sdkdiag.Diagnostics {
-	Debugf("Append called with error: %v", err)
+	ctx, callID := globalCallID(ctx)
+	Debugf("[Append %s] called with error: %v", callID, err)
 	defer func() {
 		if r := recover(); r != nil {
-			Debugf("Panic recovered in Append: %v", r)
+			Debugf("[Append %s] Panic recovered: %v", callID, r)
 			// Fallback: original error summary, panic at end of detail
 			summary := firstNWords(err, 3)
 			detail := ""
@@ -191,7 +217,7 @@ func Append(ctx context.Context, diags sdkdiag.Diagnostics, err error, keyvals .
 		}
 	}()
 	appendCommon(ctx, func(summary, detail string) {
-		Debugf("Append add error: summary=%q detail=%q", summary, detail)
+		Debugf("[Append %s] add error: summary=%q detail=%q", callID, summary, detail)
 		diags = append(diags, sdkdiag.Diagnostic{
 			Severity: sdkdiag.Error,
 			Summary:  summary,
@@ -201,34 +227,47 @@ func Append(ctx context.Context, diags sdkdiag.Diagnostics, err error, keyvals .
 	return diags
 }
 
+func globalCallID(ctx context.Context) (context.Context, string) {
+	callID := ctx.Value(smarterrContextKey)
+	callIDStr := ""
+	if callID != nil {
+		callIDStr, _ = callID.(string)
+	} else {
+		callIDStr = fmt.Sprintf("%d", glblCallID.Add(1))
+		ctx = context.WithValue(ctx, smarterrContextKey, callIDStr)
+	}
+	return ctx, callIDStr
+}
+
 // appendCommon is a shared helper for AddError and Append that resolves and formats error messages
 // using the smarterr configuration. It attempts to load configuration from the embedded filesystem and
 // the caller's directory, then builds a runtime to render the final error message. If any step fails,
 // it appends a fallback error message that always includes the original error (if present) in the summary.
 // The add function is used to append the error to the diagnostics in a way appropriate for the caller.
 func appendCommon(ctx context.Context, add func(summary, detail string), err error, keyvals ...any) {
-	Debugf("appendCommon called with error: %v, keyvals: %v", err, keyvals)
+	ctx, callID := globalCallID(ctx)
+	Debugf("[appendCommon %s] called with error: %v, keyvals: %v", callID, err, keyvals)
 	var diagnostics []error
 	if wrappedFS == nil {
-		Debugf("No wrappedFS set; calling addFallbackInitError")
+		Debugf("[appendCommon %s] No wrappedFS set; calling addFallbackInitError", callID)
 		addFallbackInitError(add, err)
 		return
 	}
 
-	relStackPaths := collectRelStackPaths(wrappedBaseDir)
-	Debugf("collectRelStackPaths returned: %v", relStackPaths)
-	cfg, cfgErr := internal.LoadConfigWithDiagnostics(wrappedFS, relStackPaths, wrappedBaseDir, &diagnostics)
+	relStackPaths := collectRelStackPaths(ctx, wrappedBaseDir)
+	Debugf("[appendCommon %s] collectRelStackPaths returned: %v", callID, relStackPaths)
+	cfg, cfgErr := internal.LoadConfigWithDiagnostics(ctx, wrappedFS, relStackPaths, wrappedBaseDir, &diagnostics)
 	if cfgErr != nil {
-		Debugf("Config load error: %v", cfgErr)
+		Debugf("[appendCommon %s] Config load error: %v", callID, cfgErr)
 		addFallbackConfigError(add, err, cfgErr)
 		return
 	}
 
-	rt := internal.NewRuntimeWithDiagnostics(cfg, err, nil, &diagnostics, keyvals...)
+	rt := internal.NewRuntimeWithDiagnostics(ctx, cfg, err, nil, &diagnostics, keyvals...)
 	values := rt.BuildTokenValueMap(ctx)
 
-	summary, detail := renderDiagnosticsWithDiagnostics(cfg, err, values, &diagnostics)
-	Debugf("renderDiagnostics returned summary=%q detail=%q", summary, detail)
+	summary, detail := renderDiagnosticsWithDiagnostics(ctx, cfg, err, values, &diagnostics)
+	Debugf("[appendCommon %s] renderDiagnostics returned summary=%q detail=%q", callID, summary, detail)
 	add(summary, detail)
 	emitLogTemplates(ctx, cfg, values)
 }
@@ -274,8 +313,9 @@ func addFallbackConfigError(add func(summary, detail string), err error, cfgErr 
 }
 
 // collectRelStackPaths normalizes call stack file paths relative to wrappedBaseDir.
-func collectRelStackPaths(baseDir string) []string {
-	Debugf("collectRelStackPaths called with baseDir=%q", baseDir)
+func collectRelStackPaths(ctx context.Context, baseDir string) []string {
+	ctx, callID := globalCallID(ctx)
+	Debugf("[collectRelStackPaths %s] called with baseDir=%q", callID, baseDir)
 	const stackDepth = 5
 	pcs := make([]uintptr, stackDepth)
 	n := runtime.Callers(2, pcs)
@@ -299,9 +339,10 @@ func collectRelStackPaths(baseDir string) []string {
 }
 
 // renderDiagnostics renders summary and detail, with fallback if templates fail.
-func renderDiagnosticsWithDiagnostics(cfg *internal.Config, err error, values map[string]any, diagnostics *[]error) (string, string) {
-	Debugf("renderDiagnostics called with error: %v, values: %v", err, values)
-	summaryTmpl, summaryErr := cfg.RenderTemplate("error_summary", values)
+func renderDiagnosticsWithDiagnostics(ctx context.Context, cfg *internal.Config, err error, values map[string]any, diagnostics *[]error) (string, string) {
+	ctx, callID := globalCallID(ctx)
+	Debugf("[renderDiagnostics %s] called with error: %v, values: %v", callID, err, values)
+	summaryTmpl, summaryErr := cfg.RenderTemplate(ctx, ErrorSummaryKey, values)
 	var summary string
 	if summaryErr != nil {
 		Debugf("Summary template error: %v", summaryErr)
@@ -310,7 +351,7 @@ func renderDiagnosticsWithDiagnostics(cfg *internal.Config, err error, values ma
 	} else {
 		summary = summaryTmpl
 	}
-	detailTmpl, detailErr := cfg.RenderTemplate("error_detail", values)
+	detailTmpl, detailErr := cfg.RenderTemplate(ctx, ErrorDetailKey, values)
 	var detail string
 	if detailErr != nil || summaryErr != nil {
 		Debugf("Detail template error: %v", detailErr)
@@ -345,21 +386,22 @@ func renderDiagnosticsWithDiagnostics(cfg *internal.Config, err error, values ma
 
 // emitLogTemplates checks for log_error, log_warn, and log_info templates and emits logs if present.
 func emitLogTemplates(ctx context.Context, cfg *internal.Config, values map[string]any) {
-	Debugf("emitLogTemplates called")
+	ctx, callID := globalCallID(ctx)
+	Debugf("[emitLogTemplates %s] called", callID)
 	if globalLogger == nil {
-		Debugf("No globalLogger set; skipping user-facing log emission")
+		Debugf("[emitLogTemplates %s] No globalLogger set; skipping user-facing log emission")
 		return
 	}
-	if tmpl, err := cfg.RenderTemplate("log_error", values); err == nil && tmpl != "" {
-		Debugf("Emitting user-facing log_error: %q", tmpl)
+	if tmpl, err := cfg.RenderTemplate(ctx, LogErrorKey, values); err == nil && tmpl != "" {
+		Debugf("[emitLogTemplates %s] Emitting user-facing log_error: %q", tmpl)
 		globalLogger.Error(ctx, tmpl, values)
 	}
-	if tmpl, err := cfg.RenderTemplate("log_warn", values); err == nil && tmpl != "" {
-		Debugf("Emitting user-facing log_warn: %q", tmpl)
+	if tmpl, err := cfg.RenderTemplate(ctx, LogWarnKey, values); err == nil && tmpl != "" {
+		Debugf("[emitLogTemplates %s] Emitting user-facing log_warn: %q", tmpl)
 		globalLogger.Warn(ctx, tmpl, values)
 	}
-	if tmpl, err := cfg.RenderTemplate("log_info", values); err == nil && tmpl != "" {
-		Debugf("Emitting user-facing log_info: %q", tmpl)
+	if tmpl, err := cfg.RenderTemplate(ctx, LogInfoKey, values); err == nil && tmpl != "" {
+		Debugf("[emitLogTemplates %s] Emitting user-facing log_info: %q", tmpl)
 		globalLogger.Info(ctx, tmpl, values)
 	}
 }

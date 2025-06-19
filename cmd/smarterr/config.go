@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/YakDriver/smarterr"
 	"github.com/YakDriver/smarterr/internal"
@@ -15,44 +17,87 @@ import (
 var startDir string
 var baseDir string
 
+func init() {
+	configCmd.Flags().StringVarP(&startDir, "start-dir", "d", "", "Directory where code using smarterr lives (default: current directory). This is typically where the error occurs.")
+	configCmd.Flags().StringVarP(&baseDir, "base-dir", "b", "", "Parent directory where go:embed is used (optional, but recommended for proper config layering as in the application). If not set, config applies only to the current directory.")
+	configCmd.Flags().BoolVarP(&debugFlag, "debug", "D", false, "Enable smarterr debug output (even if config fails to load)")
+	rootCmd.AddCommand(configCmd)
+}
+
 var configCmd = &cobra.Command{
 	Use:   "config",
 	Short: "Show the effective smarterr configuration for a directory",
 	Long: `This command prints the merged smarterr configuration that would apply
 at the specified directory path. It helps debug layered config resolution.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Default startDir to current working directory
-		if startDir == "" {
+		if debugFlag {
+			fmt.Printf("Debug mode enabled\n")
+			internal.EnableDebugForce()
+		}
+		if baseDir == "" {
+			fmt.Println("WARNING: --base-dir is not set. Config will only apply to the current directory. For proper config layering, set --base-dir to the directory where go:embed is used in your application.")
+		}
+		// Ensure baseDir and startDir are absolute
+		absBaseDir, err := filepath.Abs(baseDir)
+		if err != nil {
+			return fmt.Errorf("failed to get absolute baseDir: %w", err)
+		}
+		absStartDir := startDir
+		if absStartDir == "" {
 			cwd, err := os.Getwd()
 			if err != nil {
 				return fmt.Errorf("failed to get current directory: %w", err)
 			}
-			startDir = cwd
+			absStartDir = cwd
+		}
+		absStartDir, err = filepath.Abs(absStartDir)
+		if err != nil {
+			return fmt.Errorf("failed to get absolute startDir: %w", err)
 		}
 
-		// Ensure baseDir is absolute
-		if baseDir == "" {
-			return fmt.Errorf("--base-dir is required")
-		}
+		fmt.Printf("Loading configuration...\nStart dir: %s\nBase dir: %s\n", absStartDir, absBaseDir)
 
-		fmt.Printf("Loading configuration...\nStart dir: %s\nBase dir: %s\n", startDir, baseDir)
-
-		// Create FileSystem rooted at baseDir
-		fsys := smarterr.NewWrappedFS(baseDir)
-
-		// Compute paths relative to baseDir
-		relStartDir, err := filepath.Rel(baseDir, startDir)
+		// Compute relative path from baseDir to startDir
+		relStartDir, err := filepath.Rel(absBaseDir, absStartDir)
 		if err != nil {
 			return fmt.Errorf("failed to relativize startDir: %w", err)
 		}
+		if strings.HasPrefix(relStartDir, "..") {
+			return fmt.Errorf("startDir must be inside baseDir")
+		}
 
-		// Load config (pass relStackPaths as []string)
-		cfg, err := internal.LoadConfig(fsys, []string{relStartDir}, ".")
+		// Use a real FS rooted at baseDir
+		fsys := smarterr.NewWrappedFS(absBaseDir)
+
+		// Output all config files found under baseDir
+		fmt.Println("Config files found under baseDir:")
+		err = filepath.Walk(absBaseDir, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return nil // skip errors
+			}
+			if info.IsDir() {
+				return nil
+			}
+			if filepath.Base(path) == "smarterr.hcl" {
+				rel, _ := filepath.Rel(absBaseDir, path)
+				fmt.Println("  ", rel)
+			}
+			return nil
+		})
+		if err != nil {
+			return fmt.Errorf("error walking baseDir: %w", err)
+		}
+
+		// Pass the relative stack path
+		relStackPaths := []string{relStartDir}
+		cfg, err := internal.LoadConfig(context.Background(), fsys, relStackPaths, ".")
 		if err != nil {
 			return fmt.Errorf("failed to load config: %w", err)
 		}
 
-		fmt.Printf("Raw merged config: %+v\n", cfg)
+		if debugFlag {
+			fmt.Printf("Raw merged config: %+v\n", cfg)
+		}
 
 		fmt.Println("Merged config:")
 		// Convert the configuration to HCL format
@@ -67,25 +112,25 @@ at the specified directory path. It helps debug layered config resolution.`,
 	},
 }
 
-func init() {
-	configCmd.Flags().StringVar(&startDir, "start-dir", "", "Starting directory for configuration traversal (default is current directory)")
-	configCmd.Flags().StringVar(&baseDir, "base-dir", "", "Base directory to restrict traversal (optional)")
-	rootCmd.AddCommand(configCmd)
-}
-
 func convertConfigToHCL(cfg *internal.Config) ([]byte, error) {
 	file := hclwrite.NewEmptyFile()
 	body := file.Body()
 
-	// Smarterr block (debug, token_error_mode)
-	if cfg.Smarterr.Debug || cfg.Smarterr.TokenErrorMode != "" {
+	// Smarterr block (debug, token_error_mode, hint_match_mode, hint_join_char)
+	if cfg.Smarterr != nil && (cfg.Smarterr.Debug || (cfg.Smarterr.TokenErrorMode != nil && *cfg.Smarterr.TokenErrorMode != "") || cfg.Smarterr.HintMatchMode != nil || cfg.Smarterr.HintJoinChar != nil) {
 		smarterrBlock := body.AppendNewBlock("smarterr", nil)
 		b := smarterrBlock.Body()
 		if cfg.Smarterr.Debug {
 			b.SetAttributeValue("debug", cty.BoolVal(true))
 		}
-		if cfg.Smarterr.TokenErrorMode != "" {
-			b.SetAttributeValue("token_error_mode", cty.StringVal(cfg.Smarterr.TokenErrorMode))
+		if cfg.Smarterr.TokenErrorMode != nil && *cfg.Smarterr.TokenErrorMode != "" {
+			b.SetAttributeValue("token_error_mode", cty.StringVal(*cfg.Smarterr.TokenErrorMode))
+		}
+		if cfg.Smarterr.HintMatchMode != nil {
+			b.SetAttributeValue("hint_match_mode", cty.StringVal(*cfg.Smarterr.HintMatchMode))
+		}
+		if cfg.Smarterr.HintJoinChar != nil {
+			b.SetAttributeValue("hint_join_char", cty.StringVal(*cfg.Smarterr.HintJoinChar))
 		}
 	}
 
@@ -93,7 +138,9 @@ func convertConfigToHCL(cfg *internal.Config) ([]byte, error) {
 	for _, token := range cfg.Tokens {
 		block := body.AppendNewBlock("token", []string{token.Name})
 		b := block.Body()
-		b.SetAttributeValue("source", cty.StringVal(token.Source))
+		if token.Source != "" {
+			b.SetAttributeValue("source", cty.StringVal(token.Source))
+		}
 		if token.Parameter != nil {
 			b.SetAttributeValue("parameter", cty.StringVal(*token.Parameter))
 		}
@@ -102,12 +149,6 @@ func convertConfigToHCL(cfg *internal.Config) ([]byte, error) {
 		}
 		if token.Context != nil {
 			b.SetAttributeValue("context", cty.StringVal(*token.Context))
-		}
-		if token.Pattern != nil {
-			b.SetAttributeValue("pattern", cty.StringVal(*token.Pattern))
-		}
-		if token.Replace != nil {
-			b.SetAttributeValue("replace", cty.StringVal(*token.Replace))
 		}
 		if len(token.Transforms) > 0 {
 			vals := make([]cty.Value, len(token.Transforms))
@@ -122,6 +163,17 @@ func convertConfigToHCL(cfg *internal.Config) ([]byte, error) {
 				vals[i] = cty.StringVal(v)
 			}
 			b.SetAttributeValue("stack_matches", cty.ListVal(vals))
+		}
+		if len(token.FieldTransforms) > 0 {
+			ftBlock := b.AppendNewBlock("field_transforms", nil)
+			ftBody := ftBlock.Body()
+			for field, transforms := range token.FieldTransforms {
+				vals := make([]cty.Value, len(transforms))
+				for i, v := range transforms {
+					vals[i] = cty.StringVal(v)
+				}
+				ftBody.SetAttributeValue(field, cty.ListVal(vals))
+			}
 		}
 	}
 

@@ -92,15 +92,15 @@ func TestMergeConfigs(t *testing.T) {
 		},
 		{
 			name:        "Merge Smarterr debug and token_error_mode",
-			base:        Config{Smarterr: &Smarterr{Debug: false, TokenErrorMode: "detailed"}},
-			add:         Config{Smarterr: &Smarterr{Debug: true, TokenErrorMode: "placeholder"}},
-			expected:    Config{Smarterr: &Smarterr{Debug: true, TokenErrorMode: "placeholder"}},
+			base:        Config{Smarterr: &Smarterr{Debug: false, TokenErrorMode: strPtr("detailed")}},
+			add:         Config{Smarterr: &Smarterr{Debug: true, TokenErrorMode: strPtr("placeholder")}},
+			expected:    Config{Smarterr: &Smarterr{Debug: true, TokenErrorMode: strPtr("placeholder")}},
 			description: "Should overwrite Smarterr debug and token_error_mode",
 		},
 		{
 			name: "No changes when add is empty",
 			base: Config{
-				Smarterr:     &Smarterr{Debug: true, TokenErrorMode: "detailed"},
+				Smarterr:     &Smarterr{Debug: true, TokenErrorMode: strPtr("detailed")},
 				Tokens:       []Token{{Name: "token1", Source: "base"}},
 				Hints:        []Hint{{Name: "hint1", Suggestion: "base"}},
 				Parameters:   []Parameter{{Name: "param1", Value: "base"}},
@@ -110,7 +110,7 @@ func TestMergeConfigs(t *testing.T) {
 			},
 			add: Config{},
 			expected: Config{
-				Smarterr:     &Smarterr{Debug: true, TokenErrorMode: "detailed"},
+				Smarterr:     &Smarterr{Debug: true, TokenErrorMode: strPtr("detailed")},
 				Tokens:       []Token{{Name: "token1", Source: "base"}},
 				Hints:        []Hint{{Name: "hint1", Suggestion: "base"}},
 				Parameters:   []Parameter{{Name: "param1", Value: "base"}},

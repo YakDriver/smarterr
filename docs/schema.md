@@ -151,8 +151,8 @@ token "name" {
   arg          = "..."   # Pull from Append/AddError args
   source       = "..."   # "parameter" | "context" | "arg" | "error" | "call_stack" | "error_stack" | "hints" | "diagnostic"
   stack_matches = [ ... ] # Names of stack_match blocks
-  transforms   = [ ... ] # Names of transform blocks (applies to string tokens)
-  field_transforms = {   # (optional) For structured tokens like diagnostic, apply transforms to fields
+  transforms   = [ ... ] # Names of transform blocks (applies to the whole token value)
+  field_transforms = {   # (optional) For structured tokens (like diagnostic), apply transforms to specific fields
     summary  = ["upper"]
     detail   = ["lower"]
     # ...
@@ -163,11 +163,21 @@ token "name" {
 - `source = "call_stack"`: Uses the live stack at the point of error reporting.
 - `source = "error_stack"`: Uses the stack captured at the point of error creation (via `NewError`/`Errorf`).
 - `source = "diagnostic"`: Exposes a structured token with fields (e.g., `.diag.summary`, `.diag.detail`, `.diag.severity`).
-- `field_transforms`: Map of field name to list of transform names, applied to each field of a structured token.
+- `transforms`: Applies the listed transforms in order to the entire value of the token. Use this for simple string tokens.
+- `field_transforms`: Applies the listed transforms to specific fields of a structured token (such as one with `source = "diagnostic"`). Use this when the token resolves to a map/object and you want to transform fields differently.
+
+**Distinction:**
+- Use `transforms` for simple tokens (single string value).
+- Use `field_transforms` for structured tokens (map/object), e.g., diagnostic tokens with fields like `summary`, `detail`, etc.
+- Both can be present, but `field_transforms` only applies to structured tokens.
 
 Example:
 
 ```hcl
+token "resource" {
+  transforms = ["lower", "trim_space"]
+}
+
 token "diag" {
   source = "diagnostic"
   field_transforms = {

@@ -10,6 +10,10 @@ const (
 	ConfigFileName = "smarterr.hcl"
 )
 
+const (
+	SmarterrContextKey = "smarterrCallID"
+)
+
 // Config represents the top-level configuration for smarterr.
 type Config struct {
 	Smarterr     *Smarterr    `hcl:"smarterr,block"`
@@ -24,7 +28,7 @@ type Config struct {
 // Smarterr represents settings for how smarterr works such as debugging, token error mode, etc.
 type Smarterr struct {
 	Debug          bool    `hcl:"debug,optional"`
-	TokenErrorMode string  `hcl:"token_error_mode,optional"` // "detailed", "placeholder", "empty" (default: "empty")
+	TokenErrorMode *string `hcl:"token_error_mode,optional"` // "detailed", "placeholder", "empty" (default: "empty")
 	HintJoinChar   *string `hcl:"hint_join_char,optional"`
 	HintMatchMode  *string `hcl:"hint_match_mode,optional"` // "all" (default), "first"
 }
@@ -56,8 +60,6 @@ type Token struct {
 	StackMatches    []string            `hcl:"stack_matches,optional"`
 	Arg             *string             `hcl:"arg,optional"`
 	Context         *string             `hcl:"context,optional"`
-	Pattern         *string             `hcl:"pattern,optional"`
-	Replace         *string             `hcl:"replace,optional"`
 	Transforms      []string            `hcl:"transforms,optional"`
 	FieldTransforms map[string][]string `hcl:"field_transforms,optional"`
 }

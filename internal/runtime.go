@@ -23,15 +23,17 @@ type Runtime struct {
 	Diags  diag.Diagnostics
 }
 
-func NewRuntime(cfg *Config, err error, _ any, kv ...any) *Runtime {
+func NewRuntime(ctx context.Context, cfg *Config, err error, _ any, kv ...any) *Runtime {
+	callID := globalCallID(ctx)
+
 	// Parse key-value pairs
-	args := parseKeyvals(kv...)
+	args := parseKeyvals(ctx, kv...)
 	// Emit debug output if config or error is nil
 	if cfg == nil {
-		Debugf("Runtime configuration is nil")
+		Debugf("[NewRuntime %s] Runtime configuration is nil", callID)
 	}
 	if err != nil {
-		Debugf("Runtime initialized with error: %v", err)
+		Debugf("[NewRuntime %s] Runtime initialized with error: %v", callID, err)
 	}
 	return &Runtime{
 		Config: cfg,
@@ -41,17 +43,19 @@ func NewRuntime(cfg *Config, err error, _ any, kv ...any) *Runtime {
 }
 
 // NewRuntimeWithDiagnostics constructs a Runtime and allows for diagnostics collection (future-proof for error collection).
-func NewRuntimeWithDiagnostics(cfg *Config, err error, _ any, diagnostics *[]error, kv ...any) *Runtime {
+func NewRuntimeWithDiagnostics(ctx context.Context, cfg *Config, err error, _ any, diagnostics *[]error, kv ...any) *Runtime {
 	// For now, just call NewRuntime. In the future, collect errors here if needed.
-	return NewRuntime(cfg, err, nil, kv...)
+	return NewRuntime(ctx, cfg, err, nil, kv...)
 }
 
 // applyTransforms applies named transforms (from config) to a value, in order.
-func (rt *Runtime) applyTransforms(token *Token, value string) string {
+func (rt *Runtime) applyTransforms(ctx context.Context, token *Token, value string) string {
+	callID := globalCallID(ctx)
 	if len(token.Transforms) == 0 || rt.Config == nil {
+		Debugf("[applyTransforms %s] No transforms (%d) or Config (%t)", callID, len(token.Transforms), rt.Config == nil)
 		return value
 	}
-	Debugf("Applying transforms to token %q: %v", token.Name, token.Transforms)
+	Debugf("[applyTransforms %s] to token %q: %v", callID, token.Name, token.Transforms)
 	for _, tname := range token.Transforms {
 		var tdef *Transform
 		for i := range rt.Config.Transforms {
@@ -86,7 +90,7 @@ func (rt *Runtime) applyTransforms(token *Token, value string) string {
 			}
 		}
 	}
-	Debugf("Transformed value for token %q: %q", token.Name, value)
+	Debugf("[applyTransforms %s] %s transformed value: %q", callID, token.Name, value)
 	return value
 }
 
@@ -98,8 +102,8 @@ func applyStripPrefix(value string, step TransformStep) string {
 	}
 	if step.Recurse != nil && *step.Recurse {
 		for {
-			if strings.HasPrefix(value, *step.Value) {
-				value = strings.TrimPrefix(value, *step.Value)
+			if after, ok := strings.CutPrefix(value, *step.Value); ok {
+				value = after
 				value = strings.TrimSpace(value)
 				continue
 			}
@@ -107,8 +111,8 @@ func applyStripPrefix(value string, step TransformStep) string {
 		}
 		return value
 	}
-	if strings.HasPrefix(value, *step.Value) {
-		value = strings.TrimPrefix(value, *step.Value)
+	if after, ok := strings.CutPrefix(value, *step.Value); ok {
+		value = after
 		value = strings.TrimSpace(value)
 	}
 	return value
@@ -191,12 +195,21 @@ func applyReplace(value string, step TransformStep) string {
 	return value
 }
 
+func globalCallID(ctx context.Context) string {
+	var callID string
+	if v := ctx.Value(any("smarterrCallID")); v != nil {
+		callID, _ = v.(string)
+	}
+	return callID
+}
+
 // Resolve takes a token and resolves it based on the runtime information.
 // It supports various source types such as parameters, context values,
 // error inspection, call stack inspection, and runtime arguments.
 func (t *Token) Resolve(ctx context.Context, rt *Runtime) any {
-	Debugf("Resolving token: %s, source: %s, parameter: %v, context: %v, arg: %v, stack_matches: %v",
-		t.Name, t.Source, t.Parameter, t.Context, t.Arg, t.StackMatches)
+	callID := globalCallID(ctx)
+	Debugf("[Token.Resolve %s] Resolving token: %s, source: %s, parameter: %v, context: %v, arg: %v, stack_matches: %v",
+		callID, t.Name, t.Source, t.Parameter, t.Context, t.Arg, t.StackMatches)
 	// Infer source if not set
 	source := t.Source
 	if source == "" {
@@ -218,7 +231,7 @@ func (t *Token) Resolve(ctx context.Context, rt *Runtime) any {
 	case "diagnostic":
 		diag, ok := rt.Args["diagnostic"].(map[string]string)
 		if !ok || diag == nil {
-			Debugf("Fallback for token %q: diagnostic info not found in runtime args", t.Name)
+			Debugf("[Token.Resolve %s] Fallback for token %q: diagnostic info not found in runtime args", callID, t.Name)
 			return map[string]any{
 				"summary":  fallbackMessage(rt.Config, t.Name+".summary", "diagnostic summary not found"),
 				"detail":   fallbackMessage(rt.Config, t.Name+".detail", "diagnostic detail not found"),
@@ -243,7 +256,7 @@ func (t *Token) Resolve(ctx context.Context, rt *Runtime) any {
 	case "parameter":
 		var value string
 		if t.Parameter == nil {
-			Debugf("Fallback for token %q: token.Parameter is nil", t.Name)
+			Debugf("[Token.Resolve %s] Fallback for token %q: token.Parameter is nil", callID, t.Name)
 			value = fallbackMessage(rt.Config, t.Name, "token.Parameter is nil")
 		} else {
 			for _, p := range rt.Config.Parameters {
@@ -253,30 +266,30 @@ func (t *Token) Resolve(ctx context.Context, rt *Runtime) any {
 				}
 			}
 			if value == "" {
-				Debugf("Fallback for token %q: parameter not found in config", t.Name)
+				Debugf("[Token.Resolve %s] Fallback for token %q: parameter not found in config", callID, t.Name)
 				value = fallbackMessage(rt.Config, t.Name, "parameter not found in config")
 			}
 		}
 		if t.Transforms != nil && len(t.Transforms) > 0 {
-			value = rt.applyTransforms(t, value)
+			value = rt.applyTransforms(ctx, t, value)
 		}
 		return value
 	case "context":
 		var value string
 		if t.Context == nil {
-			Debugf("Fallback for token %q: token.Context is nil", t.Name)
+			Debugf("[Token.Resolve %s] Fallback for token %q: token.Context is nil", callID, t.Name)
 			value = fallbackMessage(rt.Config, t.Name, "token.Context is nil")
 		} else {
 			val := ctx.Value(*t.Context)
 			if val == nil {
-				Debugf("Fallback for token %q: context value is nil", t.Name)
+				Debugf("[Token.Resolve %s] Fallback for token %q: context value is nil", callID, t.Name)
 				value = fallbackMessage(rt.Config, t.Name, "context value is nil")
 			} else {
 				value = fmt.Sprintf("%v", val)
 			}
 		}
 		if t.Transforms != nil && len(t.Transforms) > 0 {
-			value = rt.applyTransforms(t, value)
+			value = rt.applyTransforms(ctx, t, value)
 		}
 		return value
 	case "call_stack":
@@ -292,22 +305,22 @@ func (t *Token) Resolve(ctx context.Context, rt *Runtime) any {
 		}
 		frames, err := gatherCallStack(3)
 		if err != nil {
-			Debugf("Fallback for token %q: call stack unavailable", t.Name)
+			Debugf("[Token.Resolve %s] Fallback for token %q: call stack unavailable", callID, t.Name)
 			value = fallbackMessage(rt.Config, t.Name, "call stack unavailable")
 		} else {
 			display, err := processStackMatches(filteredStackMatches, frames)
 			if err != nil {
-				Debugf("Fallback for token %q: stack match error: %s", t.Name, err.Error())
+				Debugf("[Token.Resolve %s] Fallback for token %q: stack match error: %s", callID, t.Name, err.Error())
 				value = fallbackMessage(rt.Config, t.Name, "stack match error: "+err.Error())
 			} else if display != "" {
 				value = display
 			} else {
-				Debugf("Fallback for token %q: no stack match found", t.Name)
+				Debugf("[Token.Resolve %s] Fallback for token %q: no stack match found", callID, t.Name)
 				value = fallbackMessage(rt.Config, t.Name, "no stack match found")
 			}
 		}
 		if t.Transforms != nil && len(t.Transforms) > 0 {
-			value = rt.applyTransforms(t, value)
+			value = rt.applyTransforms(ctx, t, value)
 		}
 		return value
 	case "error_stack":
@@ -322,81 +335,81 @@ func (t *Token) Resolve(ctx context.Context, rt *Runtime) any {
 			}
 		}
 		var frames []runtime.Frame
-		Debugf("err type: %T", rt.Error)
+		Debugf("[Token.Resolve %s] err type: %T", callID, rt.Error)
 		var stackProvider interface{ Stack() []runtime.Frame }
 		if errors.As(rt.Error, &stackProvider) && stackProvider != nil {
 			frames = stackProvider.Stack()
 		}
 		if len(frames) == 0 {
-			Debugf("Fallback for token %q: error_stack unavailable", t.Name)
+			Debugf("[Token.Resolve %s] Fallback for token %q: error_stack unavailable", callID, t.Name)
 			value = fallbackMessage(rt.Config, t.Name, "error_stack unavailable")
 		} else {
 			display, err := processStackMatches(filteredStackMatches, frames)
 			if err != nil {
-				Debugf("Fallback for token %q: error_stack match error: %s", t.Name, err.Error())
+				Debugf("[Token.Resolve %s] Fallback for token %q: error_stack match error: %s", callID, t.Name, err.Error())
 				value = fallbackMessage(rt.Config, t.Name, "error_stack match error: "+err.Error())
 			} else if display != "" {
 				value = display
 			} else {
-				Debugf("Fallback for token %q: no error_stack match found", t.Name)
+				Debugf("[Token.Resolve %s] Fallback for token %q: no error_stack match found", callID, t.Name)
 				value = fallbackMessage(rt.Config, t.Name, "no error_stack match found")
 			}
 		}
 		if t.Transforms != nil && len(t.Transforms) > 0 {
-			value = rt.applyTransforms(t, value)
+			value = rt.applyTransforms(ctx, t, value)
 		}
 		return value
 	case "error":
 		var value string
-		Debugf("Resolving error token: %s, err: %s", t.Name, rt.Error)
+		Debugf("[Token.Resolve %s] Resolving error token: %s, err: %s", callID, t.Name, rt.Error)
 		if rt.Error == nil {
-			Debugf("Fallback for token %q: rt.Error is nil", t.Name)
+			Debugf("[Token.Resolve %s] Fallback for token %q: rt.Error is nil", callID, t.Name)
 			value = fallbackMessage(rt.Config, t.Name, "rt.Error is nil")
 		} else {
 			value = fmt.Sprintf("%s", rt.Error)
 		}
 		if t.Transforms != nil && len(t.Transforms) > 0 {
-			value = rt.applyTransforms(t, value)
+			value = rt.applyTransforms(ctx, t, value)
 		}
 		return value
 	case "arg":
 		var value string
 		if t.Arg == nil {
-			Debugf("Fallback for token %q: token.Arg is nil", t.Name)
+			Debugf("[Token.Resolve %s] Fallback for token %q: token.Arg is nil", callID, t.Name)
 			value = fallbackMessage(rt.Config, t.Name, "token.Arg is nil")
 		} else {
 			argVal, ok := rt.Args[*t.Arg]
 			if !ok {
-				Debugf("Fallback for token %q: argument not found in runtime args", t.Name)
+				Debugf("[Token.Resolve %s] Fallback for token %q: argument not found in runtime args", callID, t.Name)
 				value = fallbackMessage(rt.Config, t.Name, "argument not found in runtime args")
 			} else {
 				value = fmt.Sprintf("%v", argVal)
 			}
 		}
 		if t.Transforms != nil && len(t.Transforms) > 0 {
-			value = rt.applyTransforms(t, value)
+			value = rt.applyTransforms(ctx, t, value)
 		}
 		return value
 	case "hints":
 		var value string
-		Debugf("Resolving hints token: %s", t.Name)
+		Debugf("[Token.Resolve %s] Resolving hints token: %s", callID, t.Name)
 		if rt.Error != nil {
-			value = resolveHints(rt.Error.Error(), rt.Config, nil)
+			value = resolveHints(ctx, rt.Error.Error(), rt.Config, nil)
 		}
 		if value == "" {
-			Debugf("Fallback for token %q: no matching hint found", t.Name)
+			Debugf("[Token.Resolve %s] Fallback for token %q: no matching hint found", callID, t.Name)
 			value = fallbackMessage(rt.Config, t.Name, "no matching hint found")
 		}
 		if t.Transforms != nil && len(t.Transforms) > 0 {
-			value = rt.applyTransforms(t, value)
+			value = rt.applyTransforms(ctx, t, value)
 		}
 		return value
 	default:
 		var value string
-		Debugf("Fallback for token %q: unknown token source", t.Name)
+		Debugf("[Token.Resolve %s] Fallback for token %q: unknown token source", callID, t.Name)
 		value = fallbackMessage(rt.Config, t.Name, "unknown token source")
 		if t.Transforms != nil && len(t.Transforms) > 0 {
-			value = rt.applyTransforms(t, value)
+			value = rt.applyTransforms(ctx, t, value)
 		}
 		return value
 	}
@@ -438,7 +451,25 @@ func (rt *Runtime) applyTransformByName(name, value string) string {
 
 // BuildTokenValueMap resolves all tokens in the config and returns a map of token name to value.
 func (rt *Runtime) BuildTokenValueMap(ctx context.Context) map[string]any {
+	callID := globalCallID(ctx)
+	Debugf("[BuildTokenValueMap %s] Building token value map, %+v", callID, rt.Config.Tokens)
+	// Debug: print live call stack
+	pcs := make([]uintptr, 16)
+	n := runtime.Callers(2, pcs)
+	frames := runtime.CallersFrames(pcs[:n])
+	Debugf("[BuildTokenValueMap %s] call stack:", callID)
+	for {
+		frame, more := frames.Next()
+		Debugf("[BuildTokenValueMap %s]   %s\n\t%s:%d", callID, frame.Function, frame.File, frame.Line)
+		if !more {
+			break
+		}
+	}
 	values := make(map[string]any)
+	if rt.Config == nil {
+		Debugf("[BuildTokenValueMap %s] Runtime configuration is nil; returning empty token map", callID)
+		return values
+	}
 	for _, t := range rt.Config.Tokens {
 		values[t.Name] = t.Resolve(ctx, rt)
 	}
@@ -497,17 +528,19 @@ func processStackMatches(stackMatches []StackMatch, frames []runtime.Frame) (str
 //
 // It ensures that the kv length is even and that all keys are strings.
 // If the length is not even or a key is not a string, it panics.
-func parseKeyvals(kv ...any) map[string]any {
+func parseKeyvals(ctx context.Context, kv ...any) map[string]any {
+	callID := globalCallID(ctx)
+
 	// Check if the length of kv is odd
 	if len(kv)%2 != 0 {
-		Debugf("Odd number of key-value arguments: dropping the last key-value pair")
+		Debugf("[parseKeyvals %s] Odd number of key-vals: dropping the last element", callID)
 		kv = kv[:len(kv)-1] // Remove the last element
 	}
 	result := make(map[string]any)
 	for i := 0; i < len(kv); i += 2 {
 		key, ok := kv[i].(string)
 		if !ok {
-			Debugf("Invalid key type at index %d: expected string, got %T", i, kv[i])
+			Debugf("[parseKeyvals %s] Invalid key type at index %d: expected string, got %T", callID, i, kv[i])
 			return map[string]any{}
 		}
 		result[key] = kv[i+1]
@@ -516,7 +549,9 @@ func parseKeyvals(kv ...any) map[string]any {
 }
 
 // RenderTemplate renders a named template from the config using the provided token values.
-func (cfg *Config) RenderTemplate(name string, values map[string]any) (string, error) {
+func (cfg *Config) RenderTemplate(ctx context.Context, name string, values map[string]any) (string, error) {
+	callID := globalCallID(ctx)
+	Debugf("[RenderTemplate %s] Rendering template %q with values: %v", callID, name, values)
 	var tmplStr string
 	for _, tmpl := range cfg.Templates {
 		if tmpl.Name == name {
@@ -534,11 +569,11 @@ func (cfg *Config) RenderTemplate(name string, values map[string]any) (string, e
 	}
 
 	// Scan the template AST for all referenced variables
-	vars := collectTemplateVariables(tmpl)
+	vars := CollectTemplateVariables(tmpl)
 	// Pre-populate missing values with fallback
 	for _, v := range vars {
 		if _, ok := values[v]; !ok {
-			Debugf("Fallback for template variable %q: not found in values", v)
+			Debugf("[RenderTemplate %s] Fallback for template variable %q: not found in values", callID, v)
 			values[v] = fallbackMessage(cfg, v, "template variable not found in values")
 		}
 	}
@@ -551,8 +586,8 @@ func (cfg *Config) RenderTemplate(name string, values map[string]any) (string, e
 	return buf.String(), nil
 }
 
-// collectTemplateVariables walks the template AST and returns a list of all variable names referenced.
-func collectTemplateVariables(tmpl *template.Template) []string {
+// CollectTemplateVariables walks the template AST and returns a list of all variable names referenced.
+func CollectTemplateVariables(tmpl *template.Template) []string {
 	vars := make(map[string]struct{})
 	for _, t := range tmpl.Templates() {
 		walkNodes(t.Tree.Root, vars)
@@ -613,8 +648,8 @@ func walkNodes(node parse.Node, vars map[string]struct{}) {
 
 func fallbackMessage(cfg *Config, tokenName string, msg string) string {
 	mode := "empty"
-	if cfg != nil && cfg.Smarterr != nil && cfg.Smarterr.TokenErrorMode != "" {
-		mode = cfg.Smarterr.TokenErrorMode
+	if cfg != nil && cfg.Smarterr != nil && cfg.Smarterr.TokenErrorMode != nil && *cfg.Smarterr.TokenErrorMode != "" {
+		mode = *cfg.Smarterr.TokenErrorMode
 	}
 	switch mode {
 	case "detailed":
@@ -632,7 +667,8 @@ func fallbackMessage(cfg *Config, tokenName string, msg string) string {
 }
 
 // resolveHints processes hint suggestions for an error string, returning joined suggestions and diagnostics.
-func resolveHints(errStr string, cfg *Config, diagnostics *[]error) string {
+func resolveHints(ctx context.Context, errStr string, cfg *Config, diagnostics *[]error) string {
+	callID := globalCallID(ctx)
 	var suggestions []string
 	matchMode := "all"
 	joinChar := "\n"
@@ -645,29 +681,29 @@ func resolveHints(errStr string, cfg *Config, diagnostics *[]error) string {
 		}
 	}
 	for _, hint := range cfg.Hints {
-		Debugf("Checking hint %q against error: %s", hint.Name, errStr)
+		Debugf("[resolveHints %s] Checking hint %q against error: %s", callID, hint.Name, errStr)
 		matched := true
 		if hint.ErrorContains != nil && *hint.ErrorContains != "" {
 			if !strings.Contains(errStr, *hint.ErrorContains) {
-				Debugf("Hint %q did not match error_contains: %s", hint.Name, *hint.ErrorContains)
+				Debugf("[resolveHints %s] Hint %q did not match error_contains: %s", callID, hint.Name, *hint.ErrorContains)
 				matched = false
 			} else {
-				Debugf("Hint %q matched error_contains: %s", hint.Name, *hint.ErrorContains)
+				Debugf("[resolveHints %s] Hint %q matched error_contains: %s", callID, hint.Name, *hint.ErrorContains)
 			}
 		}
 		if hint.RegexMatch != nil && *hint.RegexMatch != "" {
 			re, err := regexp.Compile(*hint.RegexMatch)
 			if err != nil {
-				Debugf("Hint %q regex compile error: %v", hint.Name, err)
+				Debugf("[resolveHints %s] Hint %q regex compile error: %v", callID, hint.Name, err)
 				if diagnostics != nil {
 					*diagnostics = append(*diagnostics, fmt.Errorf("hint %q regex compile error: %w", hint.Name, err))
 				}
 				matched = false
 			} else if !re.MatchString(errStr) {
-				Debugf("Hint %q did not match regex: %s", hint.Name, *hint.RegexMatch)
+				Debugf("[resolveHints %s] Hint %q did not match regex: %s", callID, hint.Name, *hint.RegexMatch)
 				matched = false
 			} else {
-				Debugf("Hint %q matched regex: %s", hint.Name, *hint.RegexMatch)
+				Debugf("[resolveHints %s] Hint %q matched regex: %s", callID, hint.Name, *hint.RegexMatch)
 			}
 		}
 		if matched {
