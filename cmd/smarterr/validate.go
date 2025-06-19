@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"text/template"
 
@@ -89,8 +90,18 @@ var validateCmd = &cobra.Command{
 		allErrs = append(allErrs, errs...)
 		allWarnings = append(allWarnings, warnings...)
 
+		// --- Token transforms validation ---
+		errs, warnings = validateTokenTransforms(cfg)
+		allErrs = append(allErrs, errs...)
+		allWarnings = append(allWarnings, warnings...)
+
 		// --- Stack matches validation ---
 		errs, warnings = validateStackMatches(cfg)
+		allErrs = append(allErrs, errs...)
+		allWarnings = append(allWarnings, warnings...)
+
+		// --- Transform steps validation ---
+		errs, warnings = validateTransformSteps(cfg)
 		allErrs = append(allErrs, errs...)
 		allWarnings = append(allWarnings, warnings...)
 
@@ -219,6 +230,75 @@ func validateStackMatches(cfg *internal.Config) (errs []error, warnings []string
 	for smName := range defined {
 		if _, ok := used[smName]; !ok {
 			warnings = append(warnings, fmt.Sprintf("stack_match %q is defined but not used in any token's stack_matches", smName))
+		}
+	}
+	return
+}
+
+// validateTokenTransforms checks that all token transforms exist, and warns if any transform is unused.
+func validateTokenTransforms(cfg *internal.Config) (errs []error, warnings []string) {
+	// Collect all defined transform names
+	defined := make(map[string]struct{})
+	for _, tr := range cfg.Transforms {
+		defined[tr.Name] = struct{}{}
+	}
+	// Track usage of transforms
+	used := make(map[string]struct{})
+	for _, t := range cfg.Tokens {
+		for _, trName := range t.Transforms {
+			if _, ok := defined[trName]; !ok {
+				errs = append(errs, fmt.Errorf("token %q references undefined transform %q", t.Name, trName))
+			} else {
+				used[trName] = struct{}{}
+			}
+		}
+		// Also check field_transforms
+		for _, trNames := range t.FieldTransforms {
+			for _, trName := range trNames {
+				if _, ok := defined[trName]; !ok {
+					errs = append(errs, fmt.Errorf("token %q field_transforms references undefined transform %q", t.Name, trName))
+				} else {
+					used[trName] = struct{}{}
+				}
+			}
+		}
+	}
+	// Warn if any transform is not used
+	for trName := range defined {
+		if _, ok := used[trName]; !ok {
+			warnings = append(warnings, fmt.Sprintf("transform %q is defined but not used by any token", trName))
+		}
+	}
+	return
+}
+
+// validateTransformSteps checks that all steps referenced by transforms exist, and warns if any step is unused.
+func validateTransformSteps(cfg *internal.Config) (errs []error, warnings []string) {
+	// Supported step types
+	supported := map[string]struct{}{
+		"strip_prefix": {},
+		"strip_suffix": {},
+		"remove":       {},
+		"replace":      {},
+		"trim_space":   {},
+		"fix_space":    {},
+		"lower":        {},
+		"upper":        {},
+	}
+	used := make(map[string]struct{})
+	for _, tr := range cfg.Transforms {
+		for i, step := range tr.Steps {
+			if _, ok := supported[step.Type]; !ok {
+				errs = append(errs, fmt.Errorf("transform %q has step with undefined type %q", tr.Name, step.Type))
+			} else {
+				used[step.Type] = struct{}{}
+			}
+			// If step has a regex, try to compile it
+			if step.Regex != nil {
+				if _, err := regexp.Compile(*step.Regex); err != nil {
+					errs = append(errs, fmt.Errorf("transform %q step %d (type %q) has invalid regex: %v", tr.Name, i, step.Type, err))
+				}
+			}
 		}
 	}
 	return
