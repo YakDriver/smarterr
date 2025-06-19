@@ -59,14 +59,17 @@ func SetFS(fs FileSystem, baseDir string) {
 func EnrichAppend(ctx context.Context, existing *fwdiag.Diagnostics, incoming fwdiag.Diagnostics, keyvals ...any) {
 	ctx, callID := globalCallID(ctx)
 
+	for i := range keyvals {
+		fmt.Printf("keyvals[%d]: %v\n", i, keyvals[i])
+	}
+
 	// Debug will NOT be output until LoadConfigWithDiagnostics + the setting in the config
-	// enables it because it without config we don't know if debug is enabled. Subsequent
+	// enables it because without config we don't know if debug is enabled. Subsequent
 	// calls after config load will show debug if enabled.
 	Debugf("[EnrichAppend %s] called with len(incoming): %d, keyvals: %v", callID, len(incoming), keyvals)
 	defer func() {
 		if r := recover(); r != nil {
 			Debugf("[EnrichAppend %s] Panic recovered: %v", callID, r)
-			// Fallback: append all incoming diags not already in existing
 			for _, diag := range incoming {
 				if diag == nil || existing.Contains(diag) {
 					continue
@@ -78,7 +81,6 @@ func EnrichAppend(ctx context.Context, existing *fwdiag.Diagnostics, incoming fw
 	if len(incoming) == 0 {
 		return
 	}
-	// Load config once
 	if wrappedFS == nil {
 		Debugf("[EnrichAppend %s] No wrappedFS set; cannot enrich diagnostics", callID)
 		for _, diag := range incoming {
@@ -90,8 +92,7 @@ func EnrichAppend(ctx context.Context, existing *fwdiag.Diagnostics, incoming fw
 		return
 	}
 	relStackPaths := collectRelStackPaths(ctx, wrappedBaseDir)
-	var diagnostics []error
-	cfg, cfgErr := internal.LoadConfigWithDiagnostics(ctx, wrappedFS, relStackPaths, wrappedBaseDir, &diagnostics)
+	cfg, cfgErr := internal.LoadConfig(ctx, wrappedFS, relStackPaths, wrappedBaseDir)
 	if cfgErr != nil {
 		Debugf("[EnrichAppend %s] Config load error: %v", callID, cfgErr)
 		for _, diag := range incoming {
@@ -102,7 +103,6 @@ func EnrichAppend(ctx context.Context, existing *fwdiag.Diagnostics, incoming fw
 		}
 		return
 	}
-
 	Debugf("[EnrichAppend %s] diagnostics, len(incoming): %d", callID, len(incoming))
 	for _, diag := range incoming {
 		if diag == nil {
@@ -113,20 +113,17 @@ func EnrichAppend(ctx context.Context, existing *fwdiag.Diagnostics, incoming fw
 			continue
 		}
 		Debugf("[EnrichAppend %s] enriching diagnostic: %+v", callID, diag)
-		// Enrich: build runtime with diagnostic as a token arg
-		diagMap := map[string]string{
-			"summary":  diag.Summary(),
-			"detail":   diag.Detail(),
-			"severity": diag.Severity().String(),
-		}
-		rt := internal.NewRuntimeWithDiagnostics(ctx, cfg, nil, nil, &diagnostics, append(keyvals, "diagnostic", diagMap)...)
+		// Enrich: build runtime with diagnostic as a field, not in args
+		rt := internal.NewRuntimeForDiagnostic(ctx, cfg, diag, keyvals...)
 		values := rt.BuildTokenValueMap(ctx)
 		// Render summary/detail using diagnostic templates if present, else fallback to original
 		summary, detail := diag.Summary(), diag.Detail()
 		if s, err := cfg.RenderTemplate(ctx, DiagnosticSummaryKey, values); err == nil && s != "" {
+			Debugf("[EnrichAppend %s] rendered %s: %q", callID, DiagnosticSummaryKey, s)
 			summary = s
 		}
 		if d, err := cfg.RenderTemplate(ctx, DiagnosticDetailKey, values); err == nil && d != "" {
+			Debugf("[EnrichAppend %s] rendered %s: %q", callID, DiagnosticDetailKey, d)
 			detail = d
 		}
 		// Create enriched diagnostic
@@ -247,26 +244,24 @@ func globalCallID(ctx context.Context) (context.Context, string) {
 func appendCommon(ctx context.Context, add func(summary, detail string), err error, keyvals ...any) {
 	ctx, callID := globalCallID(ctx)
 	Debugf("[appendCommon %s] called with error: %v, keyvals: %v", callID, err, keyvals)
-	var diagnostics []error
 	if wrappedFS == nil {
 		Debugf("[appendCommon %s] No wrappedFS set; calling addFallbackInitError", callID)
 		addFallbackInitError(add, err)
 		return
 	}
-
 	relStackPaths := collectRelStackPaths(ctx, wrappedBaseDir)
 	Debugf("[appendCommon %s] collectRelStackPaths returned: %v", callID, relStackPaths)
-	cfg, cfgErr := internal.LoadConfigWithDiagnostics(ctx, wrappedFS, relStackPaths, wrappedBaseDir, &diagnostics)
+	cfg, cfgErr := internal.LoadConfig(ctx, wrappedFS, relStackPaths, wrappedBaseDir)
 	if cfgErr != nil {
 		Debugf("[appendCommon %s] Config load error: %v", callID, cfgErr)
 		addFallbackConfigError(add, err, cfgErr)
 		return
 	}
 
-	rt := internal.NewRuntimeWithDiagnostics(ctx, cfg, err, nil, &diagnostics, keyvals...)
+	rt := internal.NewRuntime(ctx, cfg, err, keyvals...)
 	values := rt.BuildTokenValueMap(ctx)
 
-	summary, detail := renderDiagnosticsWithDiagnostics(ctx, cfg, err, values, &diagnostics)
+	summary, detail := renderDiagnostics(ctx, cfg, err, values)
 	Debugf("[appendCommon %s] renderDiagnostics returned summary=%q detail=%q", callID, summary, detail)
 	add(summary, detail)
 	emitLogTemplates(ctx, cfg, values)
@@ -339,14 +334,13 @@ func collectRelStackPaths(ctx context.Context, baseDir string) []string {
 }
 
 // renderDiagnostics renders summary and detail, with fallback if templates fail.
-func renderDiagnosticsWithDiagnostics(ctx context.Context, cfg *internal.Config, err error, values map[string]any, diagnostics *[]error) (string, string) {
+func renderDiagnostics(ctx context.Context, cfg *internal.Config, err error, values map[string]any) (string, string) {
 	ctx, callID := globalCallID(ctx)
 	Debugf("[renderDiagnostics %s] called with error: %v, values: %v", callID, err, values)
 	summaryTmpl, summaryErr := cfg.RenderTemplate(ctx, ErrorSummaryKey, values)
 	var summary string
 	if summaryErr != nil {
 		Debugf("Summary template error: %v", summaryErr)
-		*diagnostics = append(*diagnostics, summaryErr)
 		summary = firstNWords(err, 3)
 	} else {
 		summary = summaryTmpl
@@ -355,9 +349,6 @@ func renderDiagnosticsWithDiagnostics(ctx context.Context, cfg *internal.Config,
 	var detail string
 	if detailErr != nil || summaryErr != nil {
 		Debugf("Detail template error: %v", detailErr)
-		if detailErr != nil {
-			*diagnostics = append(*diagnostics, detailErr)
-		}
 		detail = ""
 		if err != nil {
 			detail = err.Error()
@@ -372,14 +363,6 @@ func renderDiagnosticsWithDiagnostics(ctx context.Context, cfg *internal.Config,
 		detail += problems
 	} else {
 		detail = detailTmpl
-	}
-	// Append diagnostics if present
-	if diagnostics != nil && len(*diagnostics) > 0 {
-		detail += "\n\n[smarterr diagnostics]"
-		for _, diag := range *diagnostics {
-			Debugf("[smarterr diagnostics] %v", diag)
-			detail += "\n- " + diag.Error()
-		}
 	}
 	return summary, detail
 }

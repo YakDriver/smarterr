@@ -17,13 +17,13 @@ import (
 )
 
 type Runtime struct {
-	Config *Config
-	Args   map[string]any
-	Error  error
-	Diags  diag.Diagnostics
+	Config     *Config
+	Args       map[string]any
+	Error      error
+	Diagnostic diag.Diagnostic // single diagnostic for enrichment context
 }
 
-func NewRuntime(ctx context.Context, cfg *Config, err error, _ any, kv ...any) *Runtime {
+func NewRuntime(ctx context.Context, cfg *Config, err error, kv ...any) *Runtime {
 	callID := globalCallID(ctx)
 
 	// Parse key-value pairs
@@ -42,10 +42,20 @@ func NewRuntime(ctx context.Context, cfg *Config, err error, _ any, kv ...any) *
 	}
 }
 
-// NewRuntimeWithDiagnostics constructs a Runtime and allows for diagnostics collection (future-proof for error collection).
-func NewRuntimeWithDiagnostics(ctx context.Context, cfg *Config, err error, _ any, diagnostics *[]error, kv ...any) *Runtime {
-	// For now, just call NewRuntime. In the future, collect errors here if needed.
-	return NewRuntime(ctx, cfg, err, nil, kv...)
+func NewRuntimeForDiagnostic(ctx context.Context, cfg *Config, diagnostic diag.Diagnostic, kv ...any) *Runtime {
+	callID := globalCallID(ctx)
+	args := parseKeyvals(ctx, kv...)
+	if cfg == nil {
+		Debugf("[NewRuntimeForDiagnostic %s] Runtime configuration is nil", callID)
+	}
+	if diagnostic != nil {
+		Debugf("[NewRuntimeForDiagnostic %s] Runtime initialized with diagnostic: %v", callID, diagnostic)
+	}
+	return &Runtime{
+		Config:     cfg,
+		Diagnostic: diagnostic,
+		Args:       args,
+	}
 }
 
 // applyTransforms applies named transforms (from config) to a value, in order.
@@ -229,30 +239,31 @@ func (t *Token) Resolve(ctx context.Context, rt *Runtime) any {
 
 	switch source {
 	case "diagnostic":
-		diag, ok := rt.Args["diagnostic"].(map[string]string)
-		if !ok || diag == nil {
-			Debugf("[Token.Resolve %s] Fallback for token %q: diagnostic info not found in runtime args", callID, t.Name)
-			return map[string]any{
-				"summary":  fallbackMessage(rt.Config, t.Name+".summary", "diagnostic summary not found"),
-				"detail":   fallbackMessage(rt.Config, t.Name+".detail", "diagnostic detail not found"),
-				"severity": fallbackMessage(rt.Config, t.Name+".severity", "diagnostic severity not found"),
-			}
-		}
-		result := make(map[string]any)
-		for k, v := range diag {
+		if rt.Diagnostic != nil {
+			diag := rt.Diagnostic
+			result := make(map[string]any)
+			result["summary"] = diag.Summary()
+			result["detail"] = diag.Detail()
+			result["severity"] = diag.Severity().String()
+			// Apply field transforms if present
 			if t.FieldTransforms != nil {
-				if transforms, ok := t.FieldTransforms[k]; ok && len(transforms) > 0 {
-					val := v
-					for _, tname := range transforms {
-						val = rt.applyTransformByName(tname, val)
+				for field, transforms := range t.FieldTransforms {
+					if val, ok := result[field].(string); ok {
+						for _, tname := range transforms {
+							val = rt.applyTransformByName(tname, val)
+						}
+						result[field] = val
 					}
-					result[k] = val
-					continue
 				}
 			}
-			result[k] = v
+			return result
 		}
-		return result
+		Debugf("[Token.Resolve %s] Fallback for token %q: diagnostic info not found in Runtime.Diagnostic", callID, t.Name)
+		return map[string]any{
+			"summary":  fallbackMessage(rt.Config, t.Name+".summary", "diagnostic summary not found"),
+			"detail":   fallbackMessage(rt.Config, t.Name+".detail", "diagnostic detail not found"),
+			"severity": fallbackMessage(rt.Config, t.Name+".severity", "diagnostic severity not found"),
+		}
 	case "parameter":
 		var value string
 		if t.Parameter == nil {
@@ -380,8 +391,8 @@ func (t *Token) Resolve(ctx context.Context, rt *Runtime) any {
 		} else {
 			argVal, ok := rt.Args[*t.Arg]
 			if !ok {
-				Debugf("[Token.Resolve %s] Fallback for token %q: argument not found in runtime args", callID, t.Name)
-				value = fallbackMessage(rt.Config, t.Name, "argument not found in runtime args")
+				Debugf("[Token.Resolve %s] Fallback for token %q: argument (%s) not found in runtime args", callID, t.Name, *t.Arg)
+				value = fallbackMessage(rt.Config, t.Name, fmt.Sprintf("argument (%s) not found in runtime args", *t.Arg))
 			} else {
 				value = fmt.Sprintf("%v", argVal)
 			}
@@ -394,7 +405,7 @@ func (t *Token) Resolve(ctx context.Context, rt *Runtime) any {
 		var value string
 		Debugf("[Token.Resolve %s] Resolving hints token: %s", callID, t.Name)
 		if rt.Error != nil {
-			value = resolveHints(ctx, rt.Error.Error(), rt.Config, nil)
+			value = resolveHints(ctx, rt.Error.Error(), rt.Config)
 		}
 		if value == "" {
 			Debugf("[Token.Resolve %s] Fallback for token %q: no matching hint found", callID, t.Name)
@@ -454,7 +465,7 @@ func (rt *Runtime) BuildTokenValueMap(ctx context.Context) map[string]any {
 	callID := globalCallID(ctx)
 	Debugf("[BuildTokenValueMap %s] Building token value map, %+v", callID, rt.Config.Tokens)
 	// Debug: print live call stack
-	pcs := make([]uintptr, 16)
+	pcs := make([]uintptr, 10)
 	n := runtime.Callers(2, pcs)
 	frames := runtime.CallersFrames(pcs[:n])
 	Debugf("[BuildTokenValueMap %s] call stack:", callID)
@@ -667,7 +678,7 @@ func fallbackMessage(cfg *Config, tokenName string, msg string) string {
 }
 
 // resolveHints processes hint suggestions for an error string, returning joined suggestions and diagnostics.
-func resolveHints(ctx context.Context, errStr string, cfg *Config, diagnostics *[]error) string {
+func resolveHints(ctx context.Context, errStr string, cfg *Config) string {
 	callID := globalCallID(ctx)
 	var suggestions []string
 	matchMode := "all"
@@ -695,9 +706,6 @@ func resolveHints(ctx context.Context, errStr string, cfg *Config, diagnostics *
 			re, err := regexp.Compile(*hint.RegexMatch)
 			if err != nil {
 				Debugf("[resolveHints %s] Hint %q regex compile error: %v", callID, hint.Name, err)
-				if diagnostics != nil {
-					*diagnostics = append(*diagnostics, fmt.Errorf("hint %q regex compile error: %w", hint.Name, err))
-				}
 				matched = false
 			} else if !re.MatchString(errStr) {
 				Debugf("[resolveHints %s] Hint %q did not match regex: %s", callID, hint.Name, *hint.RegexMatch)
