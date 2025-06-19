@@ -74,8 +74,13 @@ var validateCmd = &cobra.Command{
 		var allErrs []error
 		var allWarnings []string
 
+		// --- Smarterr block validation ---
+		errs, warnings := validateSmarterrBlock(cfg)
+		allErrs = append(allErrs, errs...)
+		allWarnings = append(allWarnings, warnings...)
+
 		// --- Template name validation ---
-		errs, warnings := validateTemplateNames(cfg)
+		errs, warnings = validateTemplateNames(cfg)
 		allErrs = append(allErrs, errs...)
 		allWarnings = append(allWarnings, warnings...)
 
@@ -214,6 +219,31 @@ func validateStackMatches(cfg *internal.Config) (errs []error, warnings []string
 	for smName := range defined {
 		if _, ok := used[smName]; !ok {
 			warnings = append(warnings, fmt.Sprintf("stack_match %q is defined but not used in any token's stack_matches", smName))
+		}
+	}
+	return
+}
+
+// validateSmarterrBlock checks smarterr block fields for valid values.
+func validateSmarterrBlock(cfg *internal.Config) (errs []error, warnings []string) {
+	if cfg.Smarterr == nil {
+		return
+	}
+	if cfg.Smarterr.TokenErrorMode != nil {
+		mode := *cfg.Smarterr.TokenErrorMode
+		if mode != "detailed" && mode != "placeholder" && mode != "empty" {
+			errs = append(errs, fmt.Errorf("smarterr.token_error_mode must be one of 'detailed', 'placeholder', or 'empty' (got %q)", mode))
+		}
+	}
+	if cfg.Smarterr.HintJoinChar != nil {
+		if len(*cfg.Smarterr.HintJoinChar) > 2 {
+			warnings = append(warnings, fmt.Sprintf("smarterr.hint_join_char is set to %q (longer than 2 characters)", *cfg.Smarterr.HintJoinChar))
+		}
+	}
+	if cfg.Smarterr.HintMatchMode != nil {
+		mode := *cfg.Smarterr.HintMatchMode
+		if mode != "all" && mode != "first" {
+			errs = append(errs, fmt.Errorf("smarterr.hint_match_mode must be 'all' or 'first' (got %q)", mode))
 		}
 	}
 	return
