@@ -36,6 +36,30 @@ smarterr uses configuration—not code changes—to split an incoming error into
 
 **smarterr** lets you define, update, and standardize error output for thousands of call sites—using config, not code. Evolve your error messages and formatting without cross-codebase refactors. Both developers and users get cleaner, more actionable diagnostics.
 
+## smarterr: Library and CLI
+
+smarterr consists of two components:
+
+- **Go Library** – Integrate into your application or provider code to format errors, emit diagnostics, and control runtime logging.
+- **Command-Line Tool (CLI)** – Use during development or CI to validate configuration files, inspect merged output, and catch issues early.
+
+**Use the library** to power smarterr behavior at runtime.  
+**Use the CLI** to debug and verify configs before they ship.
+
+---
+
+## Installation (CLI)
+
+You can install the smarterr CLI with Go:
+
+```sh
+go install github.com/YakDriver/smarterr/cmd/smarterr@latest
+```
+
+This will install the `smarterr` binary in your `$GOPATH/bin` or `$HOME/go/bin`.
+
+---
+
 ## Template Types and Usage
 
 smarterr supports two main template types for customizing diagnostic output:
@@ -99,19 +123,36 @@ If the relevant templates are not defined, smarterr falls back to the original e
    smarterr.EnrichAppend(ctx, &diags, incoming, "id", id) // uses diagnostic_summary/diagnostic_detail
    ```
 
-### CLI Usage (Work in Progress)
+### CLI Usage
 
-> **Note:** The smarterr CLI is under development and not yet available for use.
-> When released, it will:
-> - Output the effective merged configuration for any directory (after all layering/merging).
-> - Validate all discovered configuration files for errors, missing fields, or schema issues.
+The smarterr CLI lets you validate and inspect your configuration files. It is stable and ready for use.
 
-Planned usage:
+#### Commands
 
-```sh
-smarterr config --base-dir /path/to/project --start-dir /path/to/project/internal/service
-smarterr validate --base-dir /path/to/project --start-dir /path/to/project/internal/service
-```
+- **Show the effective merged configuration:**
+
+  ```sh
+  smarterr config --base-dir /path/to/project --start-dir /path/to/project/internal/service
+  # or with short flags:
+  smarterr config -b /path/to/project -d /path/to/project/internal/service
+  ```
+
+  This prints the merged config (after layering/merging) that would apply at the given directory.
+
+- **Validate your configuration:**
+
+  ```sh
+  smarterr validate --base-dir /path/to/project --start-dir /path/to/project/internal/service
+  # or with short flags:
+  smarterr validate -b /path/to/project -d /path/to/project/internal/service
+  ```
+
+  This checks for parse errors, missing fields, schema issues, and other problems. The exit code is non-zero if errors are found.
+
+  **Flags:**
+  - `--quiet`, `-q`: Only output errors (suppresses merged config and warnings)
+  - `--silent`, `-S`: No output, only exit code (non-zero if errors)
+  - `--debug`, `-D`: Enable debug output
 
 ---
 
