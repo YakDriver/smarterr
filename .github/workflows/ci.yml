@@ -70,7 +70,7 @@ jobs:
           git diff --exit-code go.mod go.sum
 
       - name: Test coverage for internal/ (min 65%)
-        run: make coverage-check-internal
+        run: make coverage-internal-check
 
       - name: Test coverage for root and CLI (report only)
         run: make coverage-root-cli

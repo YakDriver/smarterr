@@ -302,7 +302,7 @@ func (t *Token) Resolve(ctx context.Context, rt *Runtime) any {
 		} else {
 			// Try custom type first, then fallback to string for host/library interoperability
 			ctxKey := *t.Context
-			var val interface{}
+			var val any
 			val = ctx.Value(ContextKey(ctxKey))
 			if val == nil {
 				// Fallback to string key (for host compatibility)
