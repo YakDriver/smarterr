@@ -51,3 +51,26 @@ jobs:
 
       - name: Run tests
         run: go test -v ./...
+
+      - name: Vet code
+        run: make vet
+
+      - name: Staticcheck
+        run: make staticcheck
+
+      - name: Vulnerability check
+        run: make vulncheck
+
+      - name: Lint (golangci-lint)
+        run: make lint
+
+      - name: Check go.mod tidy
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+
+      - name: Test coverage for internal/ (min 65%)
+        run: make coverage-check-internal
+
+      - name: Test coverage for root and CLI (report only)
+        run: make coverage-root-cli
