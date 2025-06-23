@@ -65,6 +65,7 @@ func TestParseKeyvals(t *testing.T) {
 }
 
 func TestTokenResolve_BasicSources(t *testing.T) {
+	//nolint:staticcheck // smarterr must use string keys for context to interoperate with host apps, per Go context best practices for libraries
 	tests := []struct {
 		name    string
 		token   Token
@@ -89,14 +90,14 @@ func TestTokenResolve_BasicSources(t *testing.T) {
 		{
 			name:    "context found",
 			token:   Token{Source: "context", Context: stringPtr("key")},
-			ctx:     context.WithValue(context.Background(), "key", "val"),
+			ctx:     context.WithValue(context.Background(), ContextKey("key"), "val"),
 			runtime: NewRuntime(context.Background(), &Config{}, nil, nil),
 			want:    "val",
 		},
 		{
 			name:    "context not found",
 			token:   Token{Source: "context", Context: stringPtr("missing")},
-			ctx:     context.WithValue(context.Background(), "key", "val"),
+			ctx:     context.WithValue(context.Background(), ContextKey("key"), "val"),
 			runtime: NewRuntime(context.Background(), &Config{}, nil, nil),
 			want:    "",
 		},
@@ -148,7 +149,8 @@ func TestTokenResolve_BasicSources(t *testing.T) {
 }
 
 func TestRuntime_BuildTokenValueMap(t *testing.T) {
-	ctx := context.WithValue(context.Background(), "ctxKey", "ctxVal")
+	ctxKey := ContextKey("ctxKey")
+	ctx := context.WithValue(context.Background(), ctxKey, "ctxVal")
 	cfg := &Config{
 		Parameters: []Parameter{{Name: "param1", Value: "val1"}},
 		Tokens: []Token{

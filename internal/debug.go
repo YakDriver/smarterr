@@ -56,6 +56,6 @@ func Debugf(format string, args ...any) {
 	out := globalDebugOutput
 	debugMutex.Unlock()
 	if enabled {
-		fmt.Fprintf(out, "[smarterr] "+format+"\n", args...)
+		_, _ = fmt.Fprintf(out, "[smarterr] "+format+"\n", args...)
 	}
 }
