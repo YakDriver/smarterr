@@ -22,6 +22,8 @@ const (
 	SeverityInfo    = "Info"
 )
 
+type ContextKey string
+
 type Runtime struct {
 	Config     *Config
 	Args       map[string]any
@@ -288,7 +290,7 @@ func (t *Token) Resolve(ctx context.Context, rt *Runtime) any {
 				value = fallbackMessage(rt.Config, t.Name, "parameter not found in config")
 			}
 		}
-		if t.Transforms != nil && len(t.Transforms) > 0 {
+		if len(t.Transforms) > 0 {
 			value = rt.applyTransforms(ctx, t, value)
 		}
 		return value
@@ -298,7 +300,14 @@ func (t *Token) Resolve(ctx context.Context, rt *Runtime) any {
 			Debugf("[Token.Resolve %s] Fallback for token %q: token.Context is nil", callID, t.Name)
 			value = fallbackMessage(rt.Config, t.Name, "token.Context is nil")
 		} else {
-			val := ctx.Value(*t.Context)
+			// Try custom type first, then fallback to string for host/library interoperability
+			ctxKey := *t.Context
+			var val any
+			val = ctx.Value(ContextKey(ctxKey))
+			if val == nil {
+				// Fallback to string key (for host compatibility)
+				val = ctx.Value(ctxKey)
+			}
 			if val == nil {
 				Debugf("[Token.Resolve %s] Fallback for token %q: context value is nil", callID, t.Name)
 				value = fallbackMessage(rt.Config, t.Name, "context value is nil")
@@ -306,7 +315,7 @@ func (t *Token) Resolve(ctx context.Context, rt *Runtime) any {
 				value = fmt.Sprintf("%v", val)
 			}
 		}
-		if t.Transforms != nil && len(t.Transforms) > 0 {
+		if len(t.Transforms) > 0 {
 			value = rt.applyTransforms(ctx, t, value)
 		}
 		return value
@@ -337,7 +346,7 @@ func (t *Token) Resolve(ctx context.Context, rt *Runtime) any {
 				value = fallbackMessage(rt.Config, t.Name, "no stack match found")
 			}
 		}
-		if t.Transforms != nil && len(t.Transforms) > 0 {
+		if len(t.Transforms) > 0 {
 			value = rt.applyTransforms(ctx, t, value)
 		}
 		return value
@@ -373,7 +382,7 @@ func (t *Token) Resolve(ctx context.Context, rt *Runtime) any {
 				value = fallbackMessage(rt.Config, t.Name, "no error_stack match found")
 			}
 		}
-		if t.Transforms != nil && len(t.Transforms) > 0 {
+		if len(t.Transforms) > 0 {
 			value = rt.applyTransforms(ctx, t, value)
 		}
 		return value
@@ -386,7 +395,7 @@ func (t *Token) Resolve(ctx context.Context, rt *Runtime) any {
 		} else {
 			value = fmt.Sprintf("%s", rt.Error)
 		}
-		if t.Transforms != nil && len(t.Transforms) > 0 {
+		if len(t.Transforms) > 0 {
 			value = rt.applyTransforms(ctx, t, value)
 		}
 		return value
@@ -404,7 +413,7 @@ func (t *Token) Resolve(ctx context.Context, rt *Runtime) any {
 				value = fmt.Sprintf("%v", argVal)
 			}
 		}
-		if t.Transforms != nil && len(t.Transforms) > 0 {
+		if len(t.Transforms) > 0 {
 			value = rt.applyTransforms(ctx, t, value)
 		}
 		return value
@@ -418,7 +427,7 @@ func (t *Token) Resolve(ctx context.Context, rt *Runtime) any {
 			Debugf("[Token.Resolve %s] Fallback for token %q: no matching hint found", callID, t.Name)
 			value = fallbackMessage(rt.Config, t.Name, "no matching hint found")
 		}
-		if t.Transforms != nil && len(t.Transforms) > 0 {
+		if len(t.Transforms) > 0 {
 			value = rt.applyTransforms(ctx, t, value)
 		}
 		return value
@@ -426,7 +435,7 @@ func (t *Token) Resolve(ctx context.Context, rt *Runtime) any {
 		var value string
 		Debugf("[Token.Resolve %s] Fallback for token %q: unknown token source", callID, t.Name)
 		value = fallbackMessage(rt.Config, t.Name, "unknown token source")
-		if t.Transforms != nil && len(t.Transforms) > 0 {
+		if len(t.Transforms) > 0 {
 			value = rt.applyTransforms(ctx, t, value)
 		}
 		return value
@@ -608,7 +617,7 @@ func (cfg *Config) RenderTemplate(ctx context.Context, name string, values map[s
 func CollectTemplateVariables(tmpl *template.Template) []string {
 	vars := make(map[string]struct{})
 	for _, t := range tmpl.Templates() {
-		walkNodes(t.Tree.Root, vars)
+		walkNodes(t.Root, vars)
 	}
 	result := make([]string, 0, len(vars))
 	for v := range vars {

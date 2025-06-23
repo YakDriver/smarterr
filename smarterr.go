@@ -11,6 +11,9 @@ import (
 	sdkdiag "github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 )
 
+// Re-export internal.Debugf for internal debugging
+var Debugf = internal.Debugf
+
 const (
 	ID           = "id"
 	ResourceName = "resource_name"
@@ -29,14 +32,11 @@ const (
 	SeverityInfo    = internal.SeverityInfo
 )
 
-const (
-	smarterrContextKey = internal.SmarterrContextKey
-)
-
-// Re-export internal.Debugf for internal debugging
-var Debugf = internal.Debugf
+type ContextKey internal.ContextKey
 
 var (
+	globalIDCtxKey = ContextKey("smarterr:global_call_id")
+
 	wrappedFS      FileSystem
 	wrappedBaseDir string
 )
@@ -230,13 +230,13 @@ func Append(ctx context.Context, diags sdkdiag.Diagnostics, err error, keyvals .
 }
 
 func globalCallID(ctx context.Context) (context.Context, string) {
-	callID := ctx.Value(smarterrContextKey)
+	callID := ctx.Value(globalIDCtxKey)
 	callIDStr := ""
 	if callID != nil {
 		callIDStr, _ = callID.(string)
 	} else {
 		callIDStr = fmt.Sprintf("%d", glblCallID.Add(1))
-		ctx = context.WithValue(ctx, smarterrContextKey, callIDStr)
+		ctx = context.WithValue(ctx, globalIDCtxKey, callIDStr)
 	}
 	return ctx, callIDStr
 }
@@ -314,7 +314,7 @@ func addFallbackConfigError(add func(summary, detail string), err error, cfgErr 
 
 // collectRelStackPaths normalizes call stack file paths relative to wrappedBaseDir.
 func collectRelStackPaths(ctx context.Context, baseDir string) []string {
-	ctx, callID := globalCallID(ctx)
+	_, callID := globalCallID(ctx)
 	Debugf("[collectRelStackPaths %s] called with baseDir=%q", callID, baseDir)
 	const stackDepth = 5
 	pcs := make([]uintptr, stackDepth)

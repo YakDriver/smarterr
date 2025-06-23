@@ -51,3 +51,55 @@ jobs:
 
       - name: Run tests
         run: go test -v ./...
+
+      - name: Vet code
+        run: make vet
+
+      - name: Lint (golangci-lint)
+        uses: golangci/golangci-lint-action@v4
+        with:
+          version: latest
+
+      - name: Check go.mod tidy
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+
+      - name: Test coverage for internal/ (min 65%)
+        run: make coverage-internal-check
+
+      - name: Test coverage for root and CLI (report only)
+        run: make coverage-root-cli
+
+  new-go-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go Stable
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-stable-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Install dependencies
+        run: go mod download
+
+      - name: Staticcheck
+        uses: dominikh/staticcheck-action@v1
+        with:
+          version: latest
+          install-go: false
+
+      - name: Vulnerability check
+        run: make vulncheck
