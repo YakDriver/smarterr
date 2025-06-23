@@ -55,9 +55,6 @@ jobs:
       - name: Vet code
         run: make vet
 
-      - name: Vulnerability check
-        run: make vulncheck
-
       - name: Lint (golangci-lint)
         uses: golangci/golangci-lint-action@v4
         with:
@@ -74,7 +71,7 @@ jobs:
       - name: Test coverage for root and CLI (report only)
         run: make coverage-root-cli
 
-  staticcheck:
+  new-go-checks:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -103,3 +100,6 @@ jobs:
         with:
           version: latest
           install-go: false
+
+      - name: Vulnerability check
+        run: make vulncheck
