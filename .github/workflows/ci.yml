@@ -56,7 +56,7 @@ jobs:
         run: make vet
 
       - name: Lint (golangci-lint)
-        uses: golangci/golangci-lint-action@v4
+        uses: golangci/golangci-lint-action@v8
         with:
           version: latest
 
