@@ -1,0 +1,9 @@
+matrix:
+  - name: Markdown
+    sources:
+      - '**/*.md'
+    dictionary: en_US
+    encoding: utf-8
+    pipeline:
+      - markdown
+      - text
