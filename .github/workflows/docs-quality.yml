@@ -22,5 +22,3 @@ jobs:
 
       - name: Vale prose linter
         uses: errata-ai/vale-action@v2
-        with:
-          files: '**/*.md'
