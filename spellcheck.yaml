@@ -6,5 +6,5 @@ matrix:
       name: en_US
     encoding: utf-8
     pipeline:
-      - markdown
+      - markdown2
       - text
