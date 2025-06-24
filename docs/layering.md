@@ -16,7 +16,7 @@ smarterr supports layered, directory-based configuration. This allows you to def
   - When using embedded configs (the most common case for providers/plugins), smarterr examines all files in the embedded filesystem whose name is `smarterr.hcl`.
   - For a given error site, it determines which embedded config files are "related" by comparing their paths to the call site (relative to the configured base directory).
   - All matching configs (from global to most specific) are loaded and merged.
-  - **Global global config:** If `<base dir>/smarterr/smarterr.hcl` exists, it is always included first and acts as the most global config (even more global than a parent directory config).
+  - **Global config:** If `<base dir>/smarterr/smarterr.hcl` exists, it is always included first and acts as the most global config (even more global than a parent directory config).
   - The global config (at the base dir) is always included if present.
   - **Note:** smarterr does not walk the real filesystem at runtime; it operates on the set of embedded files. (The CLI will support real FS traversal in the future.)
 
