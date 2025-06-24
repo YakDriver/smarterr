@@ -22,3 +22,5 @@ jobs:
 
       - name: Vale prose linter
         uses: errata-ai/vale-action@v2
+        with:
+          fail_on_error: true
