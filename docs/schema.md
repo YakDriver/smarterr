@@ -255,25 +255,144 @@ transform "name" {
 }
 ```
 
-Example:
+#### Supported Transform Types
 
+Below are the available transform step types, what they do, and example usages:
+
+---
+
+#### `strip_prefix`
+Removes a specified prefix from the beginning of the value. If `recurse = true`, it will repeatedly remove the prefix until it no longer matches.
+
+**Example:**
 ```hcl
-transform "clean_aws_error" {
-  step "remove" {
-    regex = "RequestID: [a-z0-9-]+,"
+transform "remove_prefix" {
+  step "strip_prefix" {
+    value = "ERR: "
+    recurse = true
   }
-  step "remove" {
-    value = "InvalidParameterCombination: No"
-  }
-  step "remove" {
-    value = "https response error StatusCode: 400"
-  }
+}
+```
+- Input: `"ERR: ERR: Something went wrong"`
+- Output: `"Something went wrong"`
+
+---
+
+#### `strip_suffix`
+Removes a specified suffix from the end of the value. If `recurse = true`, it will repeatedly remove the suffix until it no longer matches.
+
+**Example:**
+```hcl
+transform "remove_trailing_comma" {
   step "strip_suffix" {
     value = ","
     recurse = true
   }
 }
 ```
+- Input: `"foo,bar,baz,,"`
+- Output: `"foo,bar,baz"`
+
+---
+
+#### `remove`
+Removes all occurrences of a substring (`value`) or a regular expression match (`regex`). If `recurse = true`, it will repeatedly remove until no more matches are found.
+
+**Example (substring):**
+```hcl
+transform "remove_word" {
+  step "remove" {
+    value = "DEBUG"
+    recurse = true
+  }
+}
+```
+- Input: `"DEBUG: something DEBUG happened"`
+- Output: `": something  happened"`
+
+**Example (regex):**
+```hcl
+transform "remove_digits" {
+  step "remove" {
+    regex = "[0-9]+"
+  }
+}
+```
+- Input: `"abc123def456"`
+- Output: `"abcdef"`
+
+---
+
+#### `replace`
+Replaces all occurrences of a regular expression (`regex`) with a replacement string (`with`). If `recurse = true`, it will repeatedly apply the replacement until no more matches are found.
+
+**Example:**
+```hcl
+transform "replace_numbers" {
+  step "replace" {
+    regex = "[0-9]+"
+    with  = "#"
+  }
+}
+```
+- Input: `"abc123def456"`
+- Output: `"abc#def#"`
+
+---
+
+#### `trim_space`
+Removes leading and trailing whitespace from the value.
+
+**Example:**
+```hcl
+transform "trim_spaces" {
+  step "trim_space" {}
+}
+```
+- Input: `"   hello world   "`
+- Output: `"hello world"`
+
+---
+
+#### `fix_space`
+Removes leading and trailing whitespace and collapses all internal whitespace sequences to a single space.
+
+**Example:**
+```hcl
+transform "fix_spaces" {
+  step "fix_space" {}
+}
+```
+- Input: `"   hello    world   "`
+- Output: `"hello world"`
+
+---
+
+#### `lower`
+Converts the value to lowercase.
+
+**Example:**
+```hcl
+transform "to_lower" {
+  step "lower" {}
+}
+```
+- Input: `"HeLLo WoRLD"`
+- Output: `"hello world"`
+
+---
+
+#### `upper`
+Converts the value to uppercase.
+
+**Example:**
+```hcl
+transform "to_upper" {
+  step "upper" {}
+}
+```
+- Input: `"HeLLo WoRLD"`
+- Output: `"HELLO WORLD"`
 
 ---
 
