@@ -16,6 +16,7 @@ smarterr supports two main template types for customizing diagnostic output:
 > **Note:** All output is a diagnostic. The template name refers to the input type (error vs. diagnostic).
 
 **Function-to-template mapping:**
+
 - `AddError` and `Append` use `error_summary` and `error_detail`.
 - `EnrichAppend` uses `diagnostic_summary` and `diagnostic_detail`.
 
@@ -66,7 +67,7 @@ token "subaction" {
 
 Reference:
 
-```
+```hcl
 smarterr {
   debug            = false         # Enable internal debug logging
   token_error_mode = "empty"      # "empty" | "placeholder" | "detailed"
@@ -88,7 +89,7 @@ smarterr {
 
 Reference:
 
-```
+```hcl
 template "error_summary" {
   format = "...Go text/template..."
 }
@@ -130,7 +131,7 @@ smarterr supports the following template types:
 
 Reference:
 
-```
+```hcl
 template "diagnostic_summary" {
   format = "{{.happening}} {{.service}} {{.resource}}: {{.original_summary}}"
 }
@@ -144,7 +145,7 @@ template "diagnostic_detail" {
 
 Reference:
 
-```
+```hcl
 token "name" {
   parameter    = "..."   # Reference a parameter
   context      = "..."   # Pull from context.Context
@@ -167,6 +168,7 @@ token "name" {
 - `field_transforms`: Applies the listed transforms to specific fields of a structured token (such as one with `source = "diagnostic"`). Use this when the token resolves to a map/object and you want to transform fields differently.
 
 **Distinction:**
+
 - Use `transforms` for simple tokens (single string value).
 - Use `field_transforms` for structured tokens (map/object), e.g., diagnostic tokens with fields like `summary`, `detail`, etc.
 - Both can be present, but `field_transforms` only applies to structured tokens.
@@ -193,7 +195,7 @@ In your template, access fields as `{{.diag.summary}}`, `{{.diag.detail}}`, etc.
 
 Reference:
 
-```
+```hcl
 stack_match "name" {
   called_from  = "..."   # Regex for function name
   display      = "..."   # Value to use if matched
@@ -243,7 +245,7 @@ stack_match "set" {
 
 Reference:
 
-```
+```hcl
 transform "name" {
   step "type" {
     value   = "..."   # For strip_prefix, strip_suffix, remove, replace
@@ -262,9 +264,11 @@ Below are the available transform step types, what they do, and example usages:
 ---
 
 #### `strip_prefix`
+
 Removes a specified prefix from the beginning of the value. If `recurse = true`, it will repeatedly remove the prefix until it no longer matches.
 
 **Example:**
+
 ```hcl
 transform "remove_prefix" {
   step "strip_prefix" {
@@ -273,15 +277,18 @@ transform "remove_prefix" {
   }
 }
 ```
+
 - Input: `"ERR: ERR: Something went wrong"`
 - Output: `"Something went wrong"`
 
 ---
 
 #### `strip_suffix`
+
 Removes a specified suffix from the end of the value. If `recurse = true`, it will repeatedly remove the suffix until it no longer matches.
 
 **Example:**
+
 ```hcl
 transform "remove_trailing_comma" {
   step "strip_suffix" {
@@ -290,15 +297,18 @@ transform "remove_trailing_comma" {
   }
 }
 ```
+
 - Input: `"foo,bar,baz,,"`
 - Output: `"foo,bar,baz"`
 
 ---
 
 #### `remove`
+
 Removes all occurrences of a substring (`value`) or a regular expression match (`regex`). If `recurse = true`, it will repeatedly remove until no more matches are found.
 
 **Example (substring):**
+
 ```hcl
 transform "remove_word" {
   step "remove" {
@@ -307,10 +317,12 @@ transform "remove_word" {
   }
 }
 ```
+
 - Input: `"DEBUG: something DEBUG happened"`
 - Output: `": something  happened"`
 
 **Example (regex):**
+
 ```hcl
 transform "remove_digits" {
   step "remove" {
@@ -318,15 +330,18 @@ transform "remove_digits" {
   }
 }
 ```
+
 - Input: `"abc123def456"`
 - Output: `"abcdef"`
 
 ---
 
 #### `replace`
+
 Replaces all occurrences of a regular expression (`regex`) with a replacement string (`with`). If `recurse = true`, it will repeatedly apply the replacement until no more matches are found.
 
 **Example:**
+
 ```hcl
 transform "replace_numbers" {
   step "replace" {
@@ -335,68 +350,82 @@ transform "replace_numbers" {
   }
 }
 ```
+
 - Input: `"abc123def456"`
 - Output: `"abc#def#"`
 
 ---
 
 #### `trim_space`
+
 Removes leading and trailing whitespace from the value.
 
 **Example:**
+
 ```hcl
 transform "trim_spaces" {
   step "trim_space" {}
 }
 ```
+
 - Input: `"   hello world   "`
 - Output: `"hello world"`
 
 ---
 
 #### `fix_space`
+
 Removes leading and trailing whitespace and collapses all internal whitespace sequences to a single space.
 
 **Example:**
+
 ```hcl
 transform "fix_spaces" {
   step "fix_space" {}
 }
 ```
+
 - Input: `"   hello    world   "`
 - Output: `"hello world"`
 
 ---
 
 #### `lower`
+
 Converts the value to lowercase.
 
 **Example:**
+
 ```hcl
 transform "to_lower" {
   step "lower" {}
 }
 ```
+
 - Input: `"HeLLo WoRLD"`
 - Output: `"hello world"`
 
 ---
 
 #### `upper`
+
 Converts the value to uppercase.
 
 **Example:**
+
 ```hcl
 transform "to_upper" {
   step "upper" {}
 }
 ```
+
 - Input: `"HeLLo WoRLD"`
 - Output: `"HELLO WORLD"`
 
 ---
 
 ## Notes
+
 - All blocks can be layered and merged across directories.
 - See [docs/layering.md](layering.md) for details on config discovery and merging.
 - See [docs/diagnostics.md](diagnostics.md) for fallback and diagnostics behavior.

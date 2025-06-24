@@ -1,6 +1,7 @@
 # smarterr Layered Configs & Merging
 
 > **Template Types and Usage:**
+>
 > - `AddError` and `Append` use `error_summary` and `error_detail` templates (for Go errors).
 > - `EnrichAppend` uses `diagnostic_summary` and `diagnostic_detail` templates (for framework diagnostics).
 > - All output is a diagnostic; the template name refers to the input type (error vs. diagnostic).
@@ -28,9 +29,9 @@ smarterr supports layered, directory-based configuration. This allows you to def
 
 ## Example
 
-```
+```text
 project/
-  smarterr.hcl         # global config
+  smarterr.hcl        # global config
   subdir/
     smarterr.hcl      # subdir config (overrides or extends global)
 ```
@@ -49,5 +50,6 @@ If an error occurs in `subdir`, both configs are loaded and merged. Any block (t
 ---
 
 ## See Also
+
 - [Full Config Schema](schema.md)
 - [Diagnostics & Fallbacks](diagnostics.md)

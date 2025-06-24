@@ -1,6 +1,7 @@
 # smarterr Diagnostics & Fallbacks
 
 > **Template Types and Usage:**
+>
 > - `AddError` and `Append` use `error_summary` and `error_detail` templates (for Go errors).
 > - `EnrichAppend` uses `diagnostic_summary` and `diagnostic_detail` templates (for framework diagnostics).
 > - All output is a diagnostic; the template name refers to the input type (error vs. diagnostic).
@@ -35,7 +36,7 @@ smarterr {
 
 ## Example: Diagnostics Section
 
-```
+```text
 ID: r-1234567890
 Cause: operation error CloudWatch: ModifyServerlessCache
 [smarterr diagnostics]
@@ -46,5 +47,6 @@ Cause: operation error CloudWatch: ModifyServerlessCache
 ---
 
 ## See Also
+
 - [Full Config Schema](schema.md)
 - [Layered Configs & Merging](layering.md)

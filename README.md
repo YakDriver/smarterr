@@ -12,13 +12,13 @@ smarterr uses configuration—not code changes—to split an incoming error into
 
 1. **Error summary** (for users)
 
-   ```
+   ```console
    creating CloudWatch Composite Alarm
    ```
 
-2. **Error detail with a suggested fix** (for users)
+1. **Error detail with a suggested fix** (for users)
 
-   ```
+   ```console
    ID: r-1234567890
    Cause: operation error CloudWatch: ModifyServerlessCache
    If you are trying to modify a serverless cache, please use the
@@ -26,9 +26,9 @@ smarterr uses configuration—not code changes—to split an incoming error into
    `aws_cloudwatch_log_group`.
    ```
 
-3. **Log** ([`tflog`](https://pkg.go.dev/github.com/hashicorp/terraform-plugin-log/tflog) or Go log)
+1. **Log** ([`tflog`](https://pkg.go.dev/github.com/hashicorp/terraform-plugin-log/tflog) or Go log)
 
-   ```
+   ```console
    creating CloudWatch Composite Alarm (ID r-1234567890): operation error CloudWatch: ModifyServerlessCache, https response error StatusCode: 400, RequestID: 9c9c8b2c-d71b-4717-b62a-68cfa4b18aa9, InvalidParameterCombination: No
    ```
 
@@ -72,6 +72,7 @@ smarterr supports two main template types for customizing diagnostic output:
 > **Note:** All output is a diagnostic. The template name refers to the input type (error vs. diagnostic).
 
 **Function-to-template mapping:**
+
 - `AddError` and `Append` use `error_summary` and `error_detail`.
 - `EnrichAppend` uses `diagnostic_summary` and `diagnostic_detail`.
 
@@ -113,7 +114,7 @@ If the relevant templates are not defined, smarterr falls back to the original e
   }
   ```
 
-2. **Call smarterr in your error handling:**
+1. **Call smarterr in your error handling:**
 
    ```go
    smarterr.AddError(ctx, diags, err, "id", id) // uses error_summary/error_detail
