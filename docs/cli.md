@@ -66,8 +66,10 @@ smarterr check --base-dir /path/to/project --start-dir /path/to/project/internal
 
 **Example:**
 
+Go to the directory where your code calls the `smarterr` library (for example, where you use `AddError`). If you use `go:embed` two directories up from there, and you want to merge configs the same way the smarterr library does and check them, run this command:
+
 ```sh
-smarterr check -b /path/to/project -d /path/to/project/internal/service
+smarterr check -b ../..
 ```
 
 ---
