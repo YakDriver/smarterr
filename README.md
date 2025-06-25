@@ -126,7 +126,7 @@ smarterr falls back to the original error or diagnostic content if you don't def
 
 ### Command-line usage
 
-The smarterr CLI lets you check and inspect your configuration files.
+The [smarterr CLI](docs/cli.md) lets you check and inspect your configuration files.
 
 #### Commands
 
