@@ -89,7 +89,7 @@ smarterr falls back to the original error or diagnostic content if you don't def
   - Cleaner, more helpful, and consistent error messages.
   - Easier to understand, context-aware diagnostics to act on.
 
-> In a large project (like the Terraform AWS Provider, with ~4000 error sites), smarterr lets you manage error output centrally and declaratively—an evolutionary step toward declarative development.
+> In a large project (like the Terraform AWS Provider, with ~15,000 error sites), smarterr lets you manage error output centrally and declaratively—an evolutionary step toward declarative development.
 
 ---
 
