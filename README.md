@@ -12,13 +12,13 @@ smarterr uses configuration—not code changes—to split an incoming error into
 
 1. **Error summary** (for users)
 
-   ```
+   ```console
    creating CloudWatch Composite Alarm
    ```
 
-2. **Error detail with a suggested fix** (for users)
+1. **Error detail with a suggested fix** (for users)
 
-   ```
+   ```console
    ID: r-1234567890
    Cause: operation error CloudWatch: ModifyServerlessCache
    If you are trying to modify a serverless cache, please use the
@@ -26,29 +26,29 @@ smarterr uses configuration—not code changes—to split an incoming error into
    `aws_cloudwatch_log_group`.
    ```
 
-3. **Log** ([`tflog`](https://pkg.go.dev/github.com/hashicorp/terraform-plugin-log/tflog) or Go log)
+1. **Log** ([`tflog`](https://pkg.go.dev/github.com/hashicorp/terraform-plugin-log/tflog) or Go log)
 
-   ```
+   ```console
    creating CloudWatch Composite Alarm (ID r-1234567890): operation error CloudWatch: ModifyServerlessCache, https response error StatusCode: 400, RequestID: 9c9c8b2c-d71b-4717-b62a-68cfa4b18aa9, InvalidParameterCombination: No
    ```
 
 ---
 
-**smarterr** lets you define, update, and standardize error output for thousands of call sites—using config, not code. Evolve your error messages and formatting without cross-codebase refactors. Both developers and users get cleaner, more actionable diagnostics.
+**smarterr** lets you define, update, and standardize error output for thousands of call sites—using Config, not code. Evolve your error messages and formatting without cross-codebase refactors. Both developers and users get clean diagnostics.
 
-## smarterr: Library and CLI
+## smarterr: Library and command line interface
 
 smarterr consists of two components:
 
-- **Go Library** – Integrate into your application or provider code to format errors, emit diagnostics, and control runtime logging.
-- **Command-Line Tool (CLI)** – Use during development or CI to validate configuration files, inspect merged output, and catch issues early.
+- **Go Library:** Integrate into your application or provider code to format errors, emit diagnostics, and control runtime logging.
+- **Command-Line Tool (CLI):** Use during development or CI to check configuration files and inspect merged output to catch issues.
 
-**Use the library** to power smarterr behavior at runtime.  
+**Use the library** to power smarterr behavior at runtime.
 **Use the CLI** to debug and verify configs before they ship.
 
 ---
 
-## Installation (CLI)
+## Command-line installation
 
 You can install the smarterr CLI with Go:
 
@@ -60,43 +60,44 @@ This will install the `smarterr` binary in your `$GOPATH/bin` or `$HOME/go/bin`.
 
 ---
 
-## Template Types and Usage
+## Template types and usage
 
 smarterr supports two main template types for customizing diagnostic output:
 
 - **Error templates**: `error_summary` and `error_detail`
-  - Used when formatting diagnostics from Go errors (e.g., via `AddError` or `Append`).
+  - Used when formatting diagnostics from Go errors (for example, via `AddError` or `Append`).
 - **Diagnostic templates**: `diagnostic_summary` and `diagnostic_detail`
-  - Used when enriching framework-generated diagnostics (e.g., via `EnrichAppend`).
+  - Used when enriching framework-generated diagnostics (for example, via `EnrichAppend`).
 
-> **Note:** All output is a diagnostic. The template name refers to the input type (error vs. diagnostic).
+> **Note:** smarterr outputs diagnostics. The template name refers to the input type (error vs. diagnostic).
 
 **Function-to-template mapping:**
+
 - `AddError` and `Append` use `error_summary` and `error_detail`.
 - `EnrichAppend` uses `diagnostic_summary` and `diagnostic_detail`.
 
-If the relevant templates are not defined, smarterr falls back to the original error or diagnostic content.
+smarterr falls back to the original error or diagnostic content if you don't define templates.
 
-## Why smarterr?
+## Why smarterr
 
 - **For developers:**
   - No more hunting down and updating error messages in thousands of places.
-  - Consistent, high-quality error output everywhere, driven by config.
+  - Consistent, high-quality error output everywhere, driven by Config.
   - Layered, declarative configuration—like you expect from modern tools—applied to error handling as a library.
   - Evolve your error messages and formatting without cross-codebase refactors.
 - **For users:**
   - Cleaner, more helpful, and consistent error messages.
-  - Context-aware diagnostics that are easier to understand and act on.
+  - Easier to understand, context-aware diagnostics to act on.
 
-> In a large project (like the Terraform AWS Provider, with ~4000 error sites), smarterr lets you manage error output centrally, declaratively, and safely—an evolutionary step toward declarative development.
+> In a large project (like the Terraform AWS Provider, with ~4000 error sites), smarterr lets you manage error output centrally and declaratively—an evolutionary step toward declarative development.
 
 ---
 
 ## Quickstart
 
-### Library Usage
+### Library usage
 
-1. **Embed your config:**
+1. **Embed your Config:**
 
   ```go
   //go:embed service/smarterr.hcl
@@ -113,7 +114,7 @@ If the relevant templates are not defined, smarterr falls back to the original e
   }
   ```
 
-2. **Call smarterr in your error handling:**
+1. **Call smarterr in your error handling:**
 
    ```go
    smarterr.AddError(ctx, diags, err, "id", id) // uses error_summary/error_detail
@@ -123,9 +124,9 @@ If the relevant templates are not defined, smarterr falls back to the original e
    smarterr.EnrichAppend(ctx, &diags, incoming, "id", id) // uses diagnostic_summary/diagnostic_detail
    ```
 
-### CLI Usage
+### Command-line usage
 
-The smarterr CLI lets you validate and inspect your configuration files. It is stable and ready for use.
+The smarterr CLI lets you check and inspect your configuration files.
 
 #### Commands
 
@@ -137,31 +138,31 @@ The smarterr CLI lets you validate and inspect your configuration files. It is s
   smarterr config -b /path/to/project -d /path/to/project/internal/service
   ```
 
-  This prints the merged config (after layering/merging) that would apply at the given directory.
+  This prints the merged Config (after layering/merging) that would apply at the given directory.
 
-- **Validate your configuration:**
+- **Check your configuration:**
 
   ```sh
-  smarterr validate --base-dir /path/to/project --start-dir /path/to/project/internal/service
+  smarterr check --base-dir /path/to/project --start-dir /path/to/project/internal/service
   # or with short flags:
-  smarterr validate -b /path/to/project -d /path/to/project/internal/service
+  smarterr check -b /path/to/project -d /path/to/project/internal/service
   ```
 
-  This checks for parse errors, missing fields, schema issues, and other problems. The exit code is non-zero if errors are found.
+  This checks for parse errors, missing fields, schema issues, and other problems. smarterr returns a non-zero exit code if it finds errors.
 
   **Flags:**
-  - `--quiet`, `-q`: Only output errors (suppresses merged config and warnings)
-  - `--silent`, `-S`: No output, only exit code (non-zero if errors)
+  - `--quiet`, `-q`: Output errors (suppresses merged Config and warnings)
+  - `--silent`, `-S`: No output, just an exit code (non-zero if errors)
   - `--debug`, `-D`: Enable debug output
 
 ---
 
 ## Example Configuration
 
-Here’s a sample `smarterr.hcl` for a Terraform provider. For details, see the [full config schema](docs/schema.md).
+Here’s an example `smarterr.hcl` for a Terraform provider. For details, see the [full Config schema](docs/schema.md).
 
 ```hcl
-# 
+#
 template "error_summary" {
   format = "{{.happening}} {{.service}} {{.resource}} ({{.identifier}}): {{.error}}"
 }
@@ -231,13 +232,13 @@ transform "clean_aws_error" {
 
 ---
 
-## Diagnostic Enrichment & Structured Tokens
+## Diagnostic enrichment & structured tokens
 
-smarterr supports config-driven enrichment of both errors and framework-generated diagnostics (such as value conversion errors in Terraform Plugin Framework) using a structured diagnostic token.
+smarterr supports Config-driven enrichment of both errors and framework-generated diagnostics (such as value conversion errors in Terraform Plugin Framework) using a structured diagnostic token.
 
-### Diagnostic Token Usage
+### Diagnostic token usage
 
-- Define a token with `source = "diagnostic"` to expose a structured token with fields (e.g., `.diag.summary`, `.diag.detail`, `.diag.severity`).
+- Define a token with `source = "diagnostic"` to expose a structured token with fields (for example, `.diag.summary`, `.diag.detail`, `.diag.severity`).
 - Use `field_transforms` to apply transforms to individual fields of the diagnostic token.
 
 Example:
@@ -266,14 +267,14 @@ template "diagnostic_detail" {
 }
 ```
 
-This enables actionable, context-rich diagnostics for both errors and framework-generated issues, all managed declaratively via config.
+This enables context-rich diagnostics for both errors and framework-generated issues, all managed declaratively via Config.
 
 ---
 
-## Learn More
+## Learn more
 
 - [Full Config Schema](docs/schema.md)
-- [Layered Configs & Merging](docs/layering.md)
+- [Layered configs & Merging](docs/layering.md)
 - [Diagnostics & Fallbacks](docs/diagnostics.md)
 - [API Reference](docs/api.md)
 - [FAQ](#faq)
@@ -282,13 +283,13 @@ This enables actionable, context-rich diagnostics for both errors and framework-
 
 ## FAQ
 
-**Q: Do end users need to configure anything?**  
-A: No. All config is embedded by the developer. End users get better errors automatically.
+**Q: Do end users need to configure anything?**
+A: No. Developers of host applications embed the Config. End users get better errors.
 
-**Q: Can I update error messages without code changes?**  
-A: Yes! Just update your config and re-embed.
+**Q: Can you update error messages without code changes?**
+A: Yes! Just update your Config and re-embed.
 
-**Q: What if config is missing or broken?**  
-A: smarterr falls back to the original error, never panics, and logs the issue if debug is enabled.
+**Q: What about missing or broken Config?**
+A: smarterr falls back to the original error, never panics. Use [`smarterr check`](#commands) and enable [debug mode](docs/schema.md#smarterr-optional) to find issues.
 
 For more, see the [Diagnostics & Fallbacks](docs/diagnostics.md) doc.

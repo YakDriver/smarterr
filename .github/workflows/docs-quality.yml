@@ -1,0 +1,26 @@
+name: Lint Markdown
+
+on:
+  push:
+    paths:
+      - '**/*.md'
+  pull_request:
+    paths:
+      - '**/*.md'
+
+jobs:
+  markdown-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run markdownlint
+        run: npx markdownlint-cli '**/*.md'
+
+      - name: Spell check
+        uses: rojopolis/spellcheck-github-actions@0.51.0
+
+      - name: Vale prose linter
+        uses: errata-ai/vale-action@v2
+        with:
+          fail_on_error: true

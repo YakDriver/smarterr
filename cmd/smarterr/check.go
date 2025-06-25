@@ -19,18 +19,18 @@ var quietFlag bool
 var silentFlag bool
 
 func init() {
-	validateCmd.Flags().StringVarP(&startDir, "start-dir", "d", "", "Directory where code using smarterr lives (default: current directory). This is typically where the error occurs.")
-	validateCmd.Flags().StringVarP(&baseDir, "base-dir", "b", "", "Parent directory where go:embed is used (optional, but recommended for proper config layering as in the application). If not set, config applies only to the current directory.")
-	validateCmd.Flags().BoolVarP(&debugFlag, "debug", "D", false, "Enable smarterr debug output (even if config fails to load)")
-	validateCmd.Flags().BoolVarP(&quietFlag, "quiet", "q", false, "Only output errors (suppresses merged config and warnings)")
-	validateCmd.Flags().BoolVarP(&silentFlag, "silent", "S", false, "No output, only exit code (non-zero if errors)")
-	rootCmd.AddCommand(validateCmd)
+	checkCmd.Flags().StringVarP(&startDir, "start-dir", "d", "", "Directory where code using smarterr lives (default: current directory). This is typically where the error occurs.")
+	checkCmd.Flags().StringVarP(&baseDir, "base-dir", "b", "", "Parent directory where go:embed is used (optional, but recommended for proper config layering as in the application). If not set, config applies only to the current directory.")
+	checkCmd.Flags().BoolVarP(&debugFlag, "debug", "D", false, "Enable smarterr debug output (even if config fails to load)")
+	checkCmd.Flags().BoolVarP(&quietFlag, "quiet", "q", false, "Only output errors (suppresses merged config and warnings)")
+	checkCmd.Flags().BoolVarP(&silentFlag, "silent", "S", false, "No output, only exit code (non-zero if errors)")
+	rootCmd.AddCommand(checkCmd)
 }
 
-var validateCmd = &cobra.Command{
-	Use:   "validate",
-	Short: "Validate smarterr configuration for a directory",
-	Long:  `Validate the merged smarterr configuration for a directory. Checks for parse errors and config loading issues.`,
+var checkCmd = &cobra.Command{
+	Use:   "check",
+	Short: "Check smarterr configuration",
+	Long:  `Check the merged smarterr configuration. Checks for parse errors and Config loading issues.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if debugFlag {
 			internal.EnableDebugForce()
@@ -57,7 +57,7 @@ var validateCmd = &cobra.Command{
 		}
 
 		if !silentFlag && !quietFlag {
-			fmt.Printf("Validating configuration...\nStart dir: %s\nBase dir: %s\n", absStartDir, absBaseDir)
+			fmt.Printf("Checking configuration...\nStart dir: %s\nBase dir: %s\n", absStartDir, absBaseDir)
 		}
 
 		// Compute relative path from baseDir to startDir
@@ -77,44 +77,44 @@ var validateCmd = &cobra.Command{
 		cfg, err := internal.LoadConfig(context.Background(), fsys, relStackPaths, ".")
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Config load error: %v\n", err)
-			return fmt.Errorf("config validation failed")
+			return fmt.Errorf("config check failed")
 		}
 
 		var allErrs []error
 		var allWarnings []string
 
-		// --- Smarterr block validation ---
-		errs, warnings := validateSmarterrBlock(cfg)
+		// --- Smarterr block check ---
+		errs, warnings := checkSmarterrBlock(cfg)
 		allErrs = append(allErrs, errs...)
 		allWarnings = append(allWarnings, warnings...)
 
-		// --- Template name validation ---
-		errs, warnings = validateTemplateNames(cfg)
+		// --- Template name check ---
+		errs, warnings = checkTemplateNames(cfg)
 		allErrs = append(allErrs, errs...)
 		allWarnings = append(allWarnings, warnings...)
 
-		// --- Template vars and tokens validation ---
-		errs, warnings = validateTemplateVarsAndTokens(cfg)
+		// --- Template vars and tokens check ---
+		errs, warnings = checkTemplateVarsAndTokens(cfg)
 		allErrs = append(allErrs, errs...)
 		allWarnings = append(allWarnings, warnings...)
 
-		// --- Token fields validation ---
-		errs, warnings = validateTokenFields(cfg)
+		// --- Token fields check ---
+		errs, warnings = checkTokenFields(cfg)
 		allErrs = append(allErrs, errs...)
 		allWarnings = append(allWarnings, warnings...)
 
-		// --- Token transforms validation ---
-		errs, warnings = validateTokenTransforms(cfg)
+		// --- Token transforms check ---
+		errs, warnings = checkTokenTransforms(cfg)
 		allErrs = append(allErrs, errs...)
 		allWarnings = append(allWarnings, warnings...)
 
-		// --- Stack matches validation ---
-		errs, warnings = validateStackMatches(cfg)
+		// --- Stack matches check ---
+		errs, warnings = checkStackMatches(cfg)
 		allErrs = append(allErrs, errs...)
 		allWarnings = append(allWarnings, warnings...)
 
-		// --- Transform steps validation ---
-		errs, warnings = validateTransformSteps(cfg)
+		// --- Transform steps check ---
+		errs, warnings = checkTransformSteps(cfg)
 		allErrs = append(allErrs, errs...)
 		allWarnings = append(allWarnings, warnings...)
 
@@ -142,14 +142,14 @@ var validateCmd = &cobra.Command{
 				for _, e := range allErrs {
 					fmt.Printf("  - %s\n", e)
 				}
-				return fmt.Errorf("config validation failed (%d error(s))", len(allErrs))
+				return fmt.Errorf("config check failed (%d error(s))", len(allErrs))
 			}
 			// silentFlag: exit non-zero, but no output
 			return fmt.Errorf("")
 		}
 
 		if !silentFlag && !quietFlag {
-			fmt.Println("Config loaded and validated successfully.")
+			fmt.Println("Config loaded and checked successfully.")
 		}
 		return nil
 	},
@@ -166,8 +166,8 @@ var canonicalTemplateNames = []string{
 	smarterr.LogInfoKey,
 }
 
-// validateTemplateNames checks that all template names are canonical and warns if any canonical is missing.
-func validateTemplateNames(cfg *internal.Config) (errs []error, warnings []string) {
+// checkTemplateNames checks that all template names are canonical and warns if any canonical is missing.
+func checkTemplateNames(cfg *internal.Config) (errs []error, warnings []string) {
 	templateNames := make(map[string]struct{})
 	for _, tmpl := range cfg.Templates {
 		templateNames[tmpl.Name] = struct{}{}
@@ -185,8 +185,8 @@ func validateTemplateNames(cfg *internal.Config) (errs []error, warnings []strin
 	return
 }
 
-// validateTemplateVarsAndTokens checks for template vars without tokens (error) and tokens unused in templates (warning).
-func validateTemplateVarsAndTokens(cfg *internal.Config) (errs []error, warnings []string) {
+// checkTemplateVarsAndTokens checks for template vars without tokens (error) and tokens unused in templates (warning).
+func checkTemplateVarsAndTokens(cfg *internal.Config) (errs []error, warnings []string) {
 	tokenNames := make(map[string]struct{})
 	for _, t := range cfg.Tokens {
 		tokenNames[t.Name] = struct{}{}
@@ -222,8 +222,8 @@ func validateTemplateVarsAndTokens(cfg *internal.Config) (errs []error, warnings
 	return
 }
 
-// validateStackMatches checks that all stack_matches referenced by tokens exist, and warns if any stack_match is unused.
-func validateStackMatches(cfg *internal.Config) (errs []error, warnings []string) {
+// checkStackMatches checks that all stack_matches referenced by tokens exist, and warns if any stack_match is unused.
+func checkStackMatches(cfg *internal.Config) (errs []error, warnings []string) {
 	// Collect all defined stack_match names
 	defined := make(map[string]struct{})
 	for _, sm := range cfg.StackMatches {
@@ -249,8 +249,8 @@ func validateStackMatches(cfg *internal.Config) (errs []error, warnings []string
 	return
 }
 
-// validateTokenTransforms checks that all token transforms exist, and warns if any transform is unused.
-func validateTokenTransforms(cfg *internal.Config) (errs []error, warnings []string) {
+// checkTokenTransforms checks that all token transforms exist, and warns if any transform is unused.
+func checkTokenTransforms(cfg *internal.Config) (errs []error, warnings []string) {
 	// Collect all defined transform names
 	defined := make(map[string]struct{})
 	for _, tr := range cfg.Transforms {
@@ -286,8 +286,8 @@ func validateTokenTransforms(cfg *internal.Config) (errs []error, warnings []str
 	return
 }
 
-// validateTransformSteps checks that all steps referenced by transforms exist, and warns if any step is unused.
-func validateTransformSteps(cfg *internal.Config) (errs []error, warnings []string) {
+// checkTransformSteps checks that all steps referenced by transforms exist, and warns if any step is unused.
+func checkTransformSteps(cfg *internal.Config) (errs []error, warnings []string) {
 	// Supported step types
 	supported := map[string]struct{}{
 		"strip_prefix": {},
@@ -309,7 +309,7 @@ func validateTransformSteps(cfg *internal.Config) (errs []error, warnings []stri
 				used[step.Type] = struct{}{}
 			}
 
-			// Validation per step type
+			// Check per step type
 			switch step.Type {
 			case "strip_prefix", "strip_suffix", "remove":
 				hasValue := step.Value != nil && *step.Value != ""
@@ -356,8 +356,8 @@ func validateTransformSteps(cfg *internal.Config) (errs []error, warnings []stri
 	return
 }
 
-// validateSmarterrBlock checks smarterr block fields for valid values.
-func validateSmarterrBlock(cfg *internal.Config) (errs []error, warnings []string) {
+// checkSmarterrBlock checks smarterr block fields for valid values.
+func checkSmarterrBlock(cfg *internal.Config) (errs []error, warnings []string) {
 	if cfg.Smarterr == nil {
 		return
 	}
@@ -381,8 +381,8 @@ func validateSmarterrBlock(cfg *internal.Config) (errs []error, warnings []strin
 	return
 }
 
-// validateTokenFields checks for misconfiguration, missing, or conflicting fields in tokens.
-func validateTokenFields(cfg *internal.Config) (errs []error, warnings []string) {
+// checkTokenFields checks for misconfiguration, missing, or conflicting fields in tokens.
+func checkTokenFields(cfg *internal.Config) (errs []error, warnings []string) {
 	for _, t := range cfg.Tokens {
 		source := t.Source
 		set := func(s *string) bool { return s != nil && *s != "" }
@@ -420,7 +420,7 @@ func validateTokenFields(cfg *internal.Config) (errs []error, warnings []string)
 			}
 		}
 
-		// Now validate based on (inferred) source
+		// Now check based on (inferred) source
 		switch inferredSource {
 		case "parameter":
 			if !set(t.Parameter) {
