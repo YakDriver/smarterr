@@ -1,9 +1,14 @@
+AddError
+AWS
 config
 Config
 Configs
 configs
 declaratively
+EnrichAppend
 Errorf
+FAQ
+NewError
 pluggable
 smarterr
 stderr
@@ -12,5 +17,3 @@ subdir
 substring
 Terraform's
 tflog
-AWS
-FAQ

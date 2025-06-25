@@ -13,14 +13,14 @@ smarterr supports two main template types for customizing diagnostic output:
 - **Diagnostic templates**: `diagnostic_summary` and `diagnostic_detail`
   - Used when enriching framework-generated diagnostics (for example, via `EnrichAppend`).
 
-> **Note:** All output is a diagnostic. The template name refers to the input type (error vs. diagnostic).
+> **Note:** All output produces a diagnostic. The template name refers to the input type (error vs. diagnostic).
 
 **Function-to-template mapping:**
 
 - `AddError` and `Append` use `error_summary` and `error_detail`.
 - `EnrichAppend` uses `diagnostic_summary` and `diagnostic_detail`.
 
-If the relevant templates aren't defined, smarterr falls back to the original error or diagnostic content.
+If you forget to define a template, smarterr falls back to the original error or diagnostic content.
 
 ---
 
@@ -112,7 +112,7 @@ type Logger interface {
 
 ## Error wrapping & annotation
 
-smarterr provides structured error wrapping to capture context and call stack information at the point your application creates an error. This enables powerful, Config-driven diagnostics and stack matching.
+smarterr provides structured error wrapping to capture context and call stack information at the point your application creates an error. This approach enables powerful, Config-driven diagnostics and stack matching.
 
 ### NewError
 
@@ -120,7 +120,7 @@ smarterr provides structured error wrapping to capture context and call stack in
 func NewError(err error) error
 ```
 
-Wraps an existing error with smarterr metadata, including a captured call stack. Use this at the site where an error is first returned or recognized.
+Wraps an existing error with smarterr metadata, including a captured call stack. Use this at the site where an error first appears.
 
 ### Errorf
 
@@ -179,11 +179,11 @@ Adds a formatted error to Terraform Plugin SDK diagnostics and returns the updat
 func EnrichAppend(ctx context.Context, existing *fwdiag.Diagnostics, incoming fwdiag.Diagnostics, keyvals ...any)
 ```
 
-Enriches a set of framework diagnostics (`incoming`) with smarterr configuration and appends the enriched diagnostics to `existing` (mutating in place via pointer). This is typically used to enhance framework-generated diagnostics (such as value conversion errors) with context, suggestions, or improved formatting, all driven by Config.
+Enriches a set of framework diagnostics (`incoming`) with smarterr configuration and appends the enriched diagnostics to `existing` (mutating in place via pointer). Use it to enhance framework-generated diagnostics (such as value conversion errors) with context, suggestions, or improved formatting, all driven by Config.
 
 - **Templates used:** `diagnostic_summary` and `diagnostic_detail` (if defined in Config)
-- If these templates aren't defined, smarterr passes through the original diagnostic summary and detail.
-- All output is a diagnostic; the template name refers to the input type (diagnostic).
+- smarterr passes through the original diagnostic summary and detail if you don't define the templates.
+- All output produces a diagnostic; the template name refers to the input type (diagnostic).
 
 **Example usage:**
 
@@ -295,7 +295,7 @@ template "diagnostic_detail" {
 func Assert[T any](val T, err error) (T, error)
 ```
 
-A helper for wrapping errors at the point of return. If `err` is non-nil, it wraps it with `NewError` (capturing stack and context); otherwise, it returns the value and error as-is. This is useful for concise error handling in Go code.
+A helper for wrapping errors at the point of return. This wraps non-nil errors with `NewError` (capturing stack and context). Otherwise, it returns the value and error unchanged. This helper enables concise error handling in Go code.
 
 ### Assert example usage
 

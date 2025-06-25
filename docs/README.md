@@ -2,14 +2,14 @@
 
 Welcome to the documentation for **smarterr**—a declarative, layered, and maintainable error handling library for Go. smarterr lets you standardize, enrich, and centrally manage error messages and diagnostics across large codebases, all driven by configuration instead of scattered code changes.
 
-## What's smarterr
+## About smarterr
 
-smarterr is a Go library that:
+smarterr, a Go library:
 
 - Centralizes error formatting and diagnostics using Config files (not code changes)
 - Supports layered, directory-based configuration for scalable error management
 - Produces actionable, user-friendly error summaries, details, and logs
-- Never obscures the original error, even if Config is missing or broken
+- Never obscures the original error, even where you don't define or break Config
 
 ## Template types and usage
 
@@ -20,14 +20,14 @@ smarterr supports two main template types for customizing diagnostic output:
 - **Diagnostic templates**: `diagnostic_summary` and `diagnostic_detail`
   - Used when enriching framework-generated diagnostics (for example, via `EnrichAppend`).
 
-> **Note:** All output is a diagnostic. The template name refers to the input type (error vs. diagnostic).
+> **Note:** Using `error_summary`, `error_detail`, `diagnostic_summary`, and `diagnostic_detail` smarterr outputs diagnostics; the template name refers to the input type (error vs. diagnostic).
 
 **Function-to-template mapping:**
 
 - `AddError` and `Append` use `error_summary` and `error_detail`.
 - `EnrichAppend` uses `diagnostic_summary` and `diagnostic_detail`.
 
-If the relevant templates aren't defined, smarterr falls back to the original error or diagnostic content.
+If you don't define the relevant templates, smarterr falls back to the original error or diagnostic content.
 
 ## Key features
 
@@ -38,7 +38,7 @@ If the relevant templates aren't defined, smarterr falls back to the original er
 
 ## Where to start
 
-If you're new to smarterr, start with these docs:
+Start with these docs:
 
 - [**API Reference**](api.md):
   - How to use smarterr in your Go code (setup, error wrapping, appending, logger integration)
@@ -47,12 +47,12 @@ If you're new to smarterr, start with these docs:
 - [**Layered configs & Merging**](layering.md):
   - How smarterr discovers, merges, and applies configs across directories
 - [**Diagnostics & Fallbacks**](diagnostics.md):
-  - How smarterr handles missing/broken Config and ensures errors are never lost
+  - How smarterr handles missing/broken Config to protect errors
 
 ## Example use cases
 
 - Standardize error output for all resources in a Terraform provider
-- Add actionable suggestions to framework diagnostics without code changes
+- Add suggestions to framework diagnostics without code changes
 - Evolve error messages and formatting centrally, even in large codebases
 
 ## More information

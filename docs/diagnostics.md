@@ -4,9 +4,9 @@
 >
 > - `AddError` and `Append` use `error_summary` and `error_detail` templates (for Go errors).
 > - `EnrichAppend` uses `diagnostic_summary` and `diagnostic_detail` templates (for framework diagnostics).
-> - All output is a diagnostic; the template name refers to the input type (error vs. diagnostic).
+> - Using `error_summary`, `error_detail`, `diagnostic_summary`, and `diagnostic_detail` smarterr outputs diagnostics; the template name refers to the input type (error vs. diagnostic).
 
-smarterr never obscures the main error. If Config is missing, broken, or a template fails, smarterr:
+smarterr never obscures the main error. If you don't define Config or make a mistake, smarterr:
 
 - Always includes the original error in the output.
 - Appends a `[smarterr diagnostics]` section to the detail if internal errors occur.
@@ -16,7 +16,7 @@ smarterr never obscures the main error. If Config is missing, broken, or a templ
 
 ## Fallback behavior
 
-- If Config is missing or broken, smarterr shows the original error.
+- If you don't define Config or define broken Config, smarterr shows the original error.
 - If smarterr can resolve a template or token, it uses a fallback message (see [`token_error_mode`](schema.md#smarterr-optional)).
 
 ---

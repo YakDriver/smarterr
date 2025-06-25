@@ -13,14 +13,14 @@ smarterr supports two main template types for customizing diagnostic output:
 - **Diagnostic templates**: `diagnostic_summary` and `diagnostic_detail`
   - Used when enriching framework-generated diagnostics (for example, via `EnrichAppend`).
 
-> **Note:** All output is a diagnostic. The template name refers to the input type (error vs. diagnostic).
+> **Note:** Using `error_summary`, `error_detail`, `diagnostic_summary`, and `diagnostic_detail`, smarterr outputs diagnostics; the template name refers to the input type (error vs. diagnostic).
 
 **Function-to-template mapping:**
 
 - `AddError` and `Append` use `error_summary` and `error_detail`.
 - `EnrichAppend` uses `diagnostic_summary` and `diagnostic_detail`.
 
-If the relevant templates aren't defined, smarterr falls back to the original error or diagnostic content.
+If you don't define Config or make a mistake, smarterr falls back to the original error or diagnostic content.
 
 ---
 
@@ -31,7 +31,7 @@ smarterr supports two types of call stack sources for stack matching and tokens:
 - **Live Call Stack**: The stack at the point where a host application calls `Append`/`AddError`/`EnrichAppend`. Use with `source = "call_stack"`.
 - **Captured Call Stack**: The stack captured at the point where a host application calls `NewError` or `Errorf`. Use with `source = "error_stack"`.
 
-This distinction allows you to match on either the reporting site or the original error site, enabling more precise and context-aware diagnostics.
+You can match on either the reporting site or the original error site, enabling more precise and context-aware diagnostics.
 
 ### Example
 
@@ -171,7 +171,7 @@ token "name" {
 
 - Use `transforms` for simple tokens (single string value).
 - Use `field_transforms` for structured tokens (map/object), for example, diagnostic tokens with fields like `summary`, `detail`, etc.
-- Both can be present, but `field_transforms` applies to structured tokens.
+- You can define both but `field_transforms` applies to structured tokens.
 
 Example:
 
@@ -259,7 +259,7 @@ transform "name" {
 
 #### Supported transform types
 
-Below are the available transform step types, what they do, and example usages:
+Transform step types, what they do, and example usages:
 
 ---
 
@@ -429,4 +429,4 @@ transform "to_upper" {
 - smarterr can layer and merge across directories.
 - See [docs/layering.md](layering.md) for details on Config discovery and merging.
 - See [docs/diagnostics.md](diagnostics.md) for fallback and diagnostics behavior.
-- For advanced stack matching, see the distinction between `call_stack` and `error_stack` sources above.
+- For advanced stack matching, see the distinction between `call_stack` and `error_stack` sources.

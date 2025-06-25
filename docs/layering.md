@@ -4,20 +4,20 @@
 >
 > - `AddError` and `Append` use `error_summary` and `error_detail` templates (for Go errors).
 > - `EnrichAppend` uses `diagnostic_summary` and `diagnostic_detail` templates (for framework diagnostics).
-> - All output is a diagnostic; the template name refers to the input type (error vs. diagnostic).
+> - Using `error_summary`, `error_detail`, `diagnostic_summary`, and `diagnostic_detail` smarterr outputs diagnostics; the template name refers to the input type (error vs. diagnostic).
 
-smarterr supports layered, directory-based configuration. This allows you to define global, parent, and subdirectory configs that are automatically merged for each error site.
+smarterr supports layered, directory-based configuration. This allows you to define global, parent, and subdirectory configs that smarterr merges for each error site.
 
 ---
 
 ## How it works
 
 - **Discovery (Embedded):**
-  - When using embedded configs (the most common case for providers/plugins), smarterr examines all files in the embedded filesystem whose name is `smarterr.hcl`.
-  - For a given error site, it determines which embedded Config files are "related" by comparing their paths to the call site (relative to the configured base directory).
+  - When using embedded configs (the most common case for providers/plugins), smarterr examines all `smarterr.hcl` files in the embedded filesystem.
+  - For a given error site, it uses "related" embedded Config files, comparing their paths to the call site (using the configured directory).
   - smarterr loads and merges all matching configs (from global to most specific).
   - **Global Config:** If `<base dir>/smarterr/smarterr.hcl` exists, it's always included first and acts as the most global Config (even more global than a parent directory Config).
-  - The global Config (at the base dir) is always included if present.
+  - smarterr includes the global Config if present.
   - **Note:** smarterr doesn't walk the real filesystem at runtime; it operates on the set of embedded files.
 
 - **Merging:**
