@@ -7,7 +7,10 @@ Errorf
 pluggable
 smarterr
 stderr
+stdout
 subdir
 substring
 Terraform's
 tflog
+AWS
+FAQ

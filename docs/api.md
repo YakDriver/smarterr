@@ -1,17 +1,17 @@
-# smarterr Go API Reference
+# smarterr library reference
 
 This document describes the public Go API for smarterr, including configuration, logger setup, error wrapping/annotation, and error appending.
 
 ---
 
-## Template Types and Usage
+## Template types and usage
 
 smarterr supports two main template types for customizing diagnostic output:
 
 - **Error templates**: `error_summary` and `error_detail`
-  - Used when formatting diagnostics from Go errors (e.g., via `AddError` or `Append`).
+  - Used when formatting diagnostics from Go errors (for example, via `AddError` or `Append`).
 - **Diagnostic templates**: `diagnostic_summary` and `diagnostic_detail`
-  - Used when enriching framework-generated diagnostics (e.g., via `EnrichAppend`).
+  - Used when enriching framework-generated diagnostics (for example, via `EnrichAppend`).
 
 > **Note:** All output is a diagnostic. The template name refers to the input type (error vs. diagnostic).
 
@@ -20,24 +20,24 @@ smarterr supports two main template types for customizing diagnostic output:
 - `AddError` and `Append` use `error_summary` and `error_detail`.
 - `EnrichAppend` uses `diagnostic_summary` and `diagnostic_detail`.
 
-If the relevant templates are not defined, smarterr falls back to the original error or diagnostic content.
+If the relevant templates aren't defined, smarterr falls back to the original error or diagnostic content.
 
 ---
 
-## Filesystem Setup
+## Filesystem setup
 
-smarterr uses a virtual filesystem for config discovery. You must set this at startup:
+smarterr uses a virtual filesystem for Config discovery. You must set this at startup:
 
 ```go
 func SetFS(fs FileSystem, baseDir string)
 ```
 
-- `fs`: A filesystem implementation (usually `*WrappedFS`).
-- `baseDir`: The root directory for config discovery (relative to embedded files or real FS).
+- `fs`: A filesystem implementation (for example, `*WrappedFS`).
+- `baseDir`: The root directory for Config discovery (relative to embedded files or real FS).
 
-### Embedded Config Example (Recommended for Providers/Plugins)
+### Embedded Config example (recommended for providers/plugins)
 
-In a file called, e.g., `internal/service/embed.go`:
+In a file called, for example, `internal/service/embed.go`:
 
 ```go
 import (
@@ -62,11 +62,11 @@ func init() {
 
 **go:embed tips:**
 
-- You can use multiple `//go:embed` lines to include multiple files or patterns.
-- `go:embed` does **not** recursively embed subdirectories; you must add a pattern for each depth you want (e.g., `service/*/smarterr.hcl`, `service/*/*/smarterr.hcl`).
-- Embedded files are resolved at compile time and included in the binary. **Config changes do not require code changes, but do require a new build.**
+- You can use several `//go:embed` lines to include files or patterns.
+- `go:embed` **doesn't** recursively embed subdirectories; you must add a pattern for each depth you want (for example, `service/*/smarterr.hcl`, `service/*/*/smarterr.hcl`).
+- Go resolves embedded files at compile time and includes them in the binary. **Config changes don't require code changes, but do require a new build.**
 
-### Real Filesystem Example (for CLI/debugging)
+### Real filesystem example
 
 ```go
 var fs = NewWrappedFS(os.DirFS("/path/to/configs"))
@@ -75,7 +75,7 @@ smarterr.SetFS(fs, "/path/to/configs")
 
 ---
 
-## Logger Setup
+## Logger setup
 
 smarterr emits user-facing logs (not internal debug logs) via a pluggable logger interface. Set the logger at startup:
 
@@ -83,7 +83,7 @@ smarterr emits user-facing logs (not internal debug logs) via a pluggable logger
 func SetLogger(logger Logger)
 ```
 
-### Provided Loggers
+### Provided loggers
 
 - **TFLogLogger**: Integrates with Terraform's [`tflog`](https://pkg.go.dev/github.com/hashicorp/terraform-plugin-log/tflog)
 
@@ -97,7 +97,7 @@ func SetLogger(logger Logger)
   smarterr.SetLogger(smarterr.StdLogger{})
   ```
 
-You can implement your own `Logger` if needed:
+You can create your own `Logger` if needed:
 
 ```go
 type Logger interface {
@@ -110,9 +110,9 @@ type Logger interface {
 
 ---
 
-## Error Wrapping & Annotation
+## Error wrapping & annotation
 
-smarterr provides structured error wrapping to capture context and call stack information at the point an error is created. This enables powerful, config-driven diagnostics and stack matching.
+smarterr provides structured error wrapping to capture context and call stack information at the point your application creates an error. This enables powerful, Config-driven diagnostics and stack matching.
 
 ### NewError
 
@@ -130,7 +130,7 @@ func Errorf(format string, args ...any) error
 
 Formats a new error (like `fmt.Errorf`) and captures the call stack and message. Use this for new errors.
 
-#### Errorf Example Usage
+#### Errorf example usage
 
 ```go
 if err != nil {
@@ -140,22 +140,22 @@ if err != nil {
 return smarterr.Errorf("unexpected result for alarm %q", name)
 ```
 
-The resulting error can be passed directly to `smarterr.Append` or `smarterr.AddError` for config-driven formatting and diagnostics. The captured stack is used for advanced stack matching and template tokens.
+You can pass the resulting error directly to `smarterr.Append` or `smarterr.AddError` for Config-driven formatting and diagnostics. smarterr uses the captured stack for advanced stack matching and template tokens.
 
-### Error Type
+### Error type
 
 ```go
 type Error struct {
     Err         error             // The original or wrapped error
     Message     string            // Optional developer-provided message (from Errorf)
-    Annotations map[string]string // Arbitrary key-value annotations (e.g., subaction, resource_id)
+    Annotations map[string]string // Arbitrary key-value annotations (for example, subaction, resource_id)
     Stack       []runtime.Frame   // Captured call stack for stack matching
 }
 ```
 
 ---
 
-## Error Appending
+## Error appending
 
 ### AddError
 
@@ -179,10 +179,10 @@ Adds a formatted error to Terraform Plugin SDK diagnostics and returns the updat
 func EnrichAppend(ctx context.Context, existing *fwdiag.Diagnostics, incoming fwdiag.Diagnostics, keyvals ...any)
 ```
 
-Enriches a set of framework diagnostics (`incoming`) with smarterr configuration and appends the enriched diagnostics to `existing` (mutating in place via pointer). This is typically used to enhance framework-generated diagnostics (such as value conversion errors) with context, suggestions, or improved formatting, all driven by config.
+Enriches a set of framework diagnostics (`incoming`) with smarterr configuration and appends the enriched diagnostics to `existing` (mutating in place via pointer). This is typically used to enhance framework-generated diagnostics (such as value conversion errors) with context, suggestions, or improved formatting, all driven by Config.
 
-- **Templates used:** `diagnostic_summary` and `diagnostic_detail` (if defined in config)
-- If these templates are not defined, the original diagnostic summary and detail are used.
+- **Templates used:** `diagnostic_summary` and `diagnostic_detail` (if defined in Config)
+- If these templates aren't defined, smarterr passes through the original diagnostic summary and detail.
 - All output is a diagnostic; the template name refers to the input type (diagnostic).
 
 **Example usage:**
@@ -191,7 +191,7 @@ Enriches a set of framework diagnostics (`incoming`) with smarterr configuration
 smarterr.EnrichAppend(ctx, &resp.Diagnostics, incoming, smarterr.ID, req.Identity.Raw)
 ```
 
-See also: [Template Types and Usage](#template-types-and-usage)
+See also: [Template types and usage](#template-types-and-usage)
 
 ---
 
@@ -204,17 +204,21 @@ See also: [Template Types and Usage](#template-types-and-usage)
 
 ---
 
-## Reserved Template Names
+## Reserved template names
 
-smarterr uses special template names in your config to control where output goes:
+smarterr uses special template names in your Config to control where output goes:
 
 - `error_summary`: Rendered to the diagnostics summary (the main error message users see).
 - `error_detail`: Rendered to the diagnostics detail (the expanded/collapsed error details).
-- `log_error`, `log_warn`, `log_info`: Rendered to the user-facing logger (e.g., tflog or Go log) at the corresponding level.
+- `diagnostic_summary`: Rendered to the diagnostics summary (the main error message users see).
+- `diagnostic_detail`: Rendered to the diagnostics detail (the expanded/collapsed error details).
+- `log_error`, `log_warn`, `log_info`: Rendered to the user-facing logger (for example, tflog or Go log) at the corresponding level.
 
-You reference these templates by name in your config. smarterr will automatically use them when you call `Append` or `AddError`.
+> **Note:** smarterr outputs diagnostics. The template name refers to the input type (error vs. diagnostic).
 
-### Example: API Call + Config
+You reference these templates by name in your Config. smarterr will automatically use them when you call `Append`, `AddError`, and `EnrichAppend`.
+
+### Example Config and call
 
 **Go code:**
 
@@ -240,19 +244,19 @@ template "log_error" {
 
 - The summary in diagnostics will use `error_summary`.
 - The detail in diagnostics will use `error_detail`.
-- The logger (e.g., tflog) will receive the output of `log_error`.
+- The logger (for example, tflog) will receive the output of `log_error`.
 
 See [Full Config Schema](schema.md) for all template and token options.
 
 ---
 
-## Diagnostic Token Support
+## Diagnostic token support
 
-smarterr supports config-driven enrichment of both errors and framework-generated diagnostics (e.g., value conversion errors in Terraform Plugin Framework) via a special diagnostic token source.
+smarterr supports Config-driven enrichment of both errors and framework-generated diagnostics (for example, value conversion errors in Terraform Plugin Framework) via a special diagnostic token source.
 
-### Diagnostic Token
+### Diagnostic token
 
-- Use `source = "diagnostic"` in a token block to expose a structured token with fields (e.g., `.diag.summary`, `.diag.detail`, `.diag.severity`).
+- Use `source = "diagnostic"` in a token block to expose a structured token with fields (for example, `.diag.summary`, `.diag.detail`, `.diag.severity`).
 - Use `field_transforms` to apply transforms to individual fields of the diagnostic token.
 
 #### Example
@@ -269,7 +273,7 @@ token "diag" {
 
 In your template, access fields as `{{.diag.summary}}`, `{{.diag.detail}}`, etc.
 
-#### Template Example
+#### Template example
 
 ```hcl
 template "diagnostic_summary" {
@@ -281,7 +285,7 @@ template "diagnostic_detail" {
 }
 ```
 
-- The diagnostic token is populated from the runtime (e.g., framework diagnostic context) and can be enriched and transformed via config.
+- smarterr populates the diagnostic token from the runtime (for example, framework diagnostic context) and can enrich and transform it via Config.
 
 ---
 
@@ -291,9 +295,9 @@ template "diagnostic_detail" {
 func Assert[T any](val T, err error) (T, error)
 ```
 
-A helper for wrapping errors at the point of return. If `err` is non-nil, it wraps it with `NewError` (capturing stack and context); otherwise, it returns the value and error as-is. This is especially useful for concise error handling in Go code.
+A helper for wrapping errors at the point of return. If `err` is non-nil, it wraps it with `NewError` (capturing stack and context); otherwise, it returns the value and error as-is. This is useful for concise error handling in Go code.
 
-### Assert Example Usage
+### Assert example usage
 
 ```go
 val, err := smarterr.Assert(doSomething())
@@ -319,13 +323,13 @@ const (
 )
 ````
 
-You can use these constants when passing key-value pairs to `AddError`, `Append`, or `EnrichAppend`, or when defining tokens in your config files. For example:
+You can use these constants when passing key-value pairs to `AddError`, `Append`, or `EnrichAppend`, or when defining tokens in your Config files. For example:
 
 ```go
 smarterr.AddError(ctx, diags, err, smarterr.ID, id)
 ```
 
-Or in your config:
+Or in your Config:
 
 ```hcl
 token "identifier" {
@@ -335,7 +339,7 @@ token "identifier" {
 
 ---
 
-## See Also
+## See also
 
 - [Quickstart in README](../README.md#quickstart)
 - [Full Config Schema](schema.md)

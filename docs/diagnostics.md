@@ -1,30 +1,29 @@
-# smarterr Diagnostics & Fallbacks
+# smarterr diagnostics & fallbacks
 
-> **Template Types and Usage:**
+> **Template types and usage:**
 >
 > - `AddError` and `Append` use `error_summary` and `error_detail` templates (for Go errors).
 > - `EnrichAppend` uses `diagnostic_summary` and `diagnostic_detail` templates (for framework diagnostics).
 > - All output is a diagnostic; the template name refers to the input type (error vs. diagnostic).
 
-smarterr is designed to never obscure the main error. If config is missing, broken, or a template fails, smarterr:
+smarterr never obscures the main error. If Config is missing, broken, or a template fails, smarterr:
 
 - Always includes the original error in the output.
 - Appends a `[smarterr diagnostics]` section to the detail if internal errors occur.
-- Logs all internal errors via `Debugf` if debug is enabled (see the [`smarterr` block](schema.md#smarterr-optional)).
+- Logs all internal errors via `Debugf` if you enable debugging (see the [`smarterr` block](schema.md#smarterr-optional)).
 
 ---
 
-## Fallback Behavior
+## Fallback behavior
 
-- If config is missing or broken, the original error is shown.
-- If a template or token cannot be resolved, a fallback message is used (see [`token_error_mode`](schema.md#smarterr-optional)).
-- Internal errors (e.g., regex compile errors, template errors) are aggregated and shown in a `[smarterr diagnostics]` section.
+- If Config is missing or broken, smarterr shows the original error.
+- If smarterr can resolve a template or token, it uses a fallback message (see [`token_error_mode`](schema.md#smarterr-optional)).
 
 ---
 
-## Debug Logging
+## Debug logging
 
-Enable debug logging by setting `debug = true` in the `smarterr` block. All internal errors and fallbacks will be logged to stderr.
+Enable debug logging by setting `debug = true` in the `smarterr` block. smarterr will log information, warnings, internal errors, and fallbacks to stdout.
 
 ```hcl
 smarterr {
@@ -34,7 +33,7 @@ smarterr {
 
 ---
 
-## Example: Diagnostics Section
+## Example: Diagnostics section
 
 ```text
 ID: r-1234567890
@@ -46,7 +45,7 @@ Cause: operation error CloudWatch: ModifyServerlessCache
 
 ---
 
-## See Also
+## See also
 
 - [Full Config Schema](schema.md)
-- [Layered Configs & Merging](layering.md)
+- [Layered configs & Merging](layering.md)
