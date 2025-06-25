@@ -37,6 +37,7 @@ smarterr config --base-dir /path/to/project --start-dir /path/to/project/interna
 ```
 
 **Flags:**
+
 - `--base-dir`, `-b`: Directory, perhaps parent directory, where you use `go:embed` in your project (for example, `internal`). If not set, the command looks at current directory and won't merge parent or global configs.
 - `--start-dir`, `-d`: Directory where code using smarterr lives (default: current directory). Typically, set this to where an error occurs.
 - `--debug`, `-D`: Enable debug output (shows internal merging and raw Config).
@@ -58,6 +59,7 @@ smarterr check --base-dir /path/to/project --start-dir /path/to/project/internal
 ```
 
 **Flags:**
+
 - `--base-dir`, `-b`: Directory, perhaps parent directory, where you use `go:embed` in your project (for example, `internal`). If not set, the command looks at current directory and won't merge parent or global configs.
 - `--start-dir`, `-d`: Directory where code using smarterr lives (default: current directory).
 - `--debug`, `-D`: Enable debug output (shows internal diagnostics).
