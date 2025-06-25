@@ -49,6 +49,7 @@ smarterrInitOnce
 StackMatches
 StatusCode
 stderr
+stdout
 StdLogger
 subaction
 subdir
