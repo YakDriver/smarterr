@@ -60,6 +60,19 @@ This will install the `smarterr` binary in your `$GOPATH/bin` or `$HOME/go/bin`.
 
 ---
 
+## GitHub action
+
+You can use the [GitHub Action](https://github.com/marketplace/actions/check-smarterr-config) to check Config during CI checks.
+
+For example:
+
+```yaml
+- uses: YakDriver/check-smarterr-config@latest
+  name: Check smarterr config
+  with:
+    base-dir: './internal'
+```
+
 ## Template types and usage
 
 smarterr supports two main template types for customizing diagnostic output:
