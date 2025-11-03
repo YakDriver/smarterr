@@ -277,6 +277,17 @@ func TestMigratePatterns_SDKv2_AppendErrorf(t *testing.T) {
 			input:    "\treturn sdkdiag.AppendErrorf(diags, \"waiting for VPC (%s) creation: %s\", aws.ToString(output.VpcId), err)\n",
 			expected: "\treturn smerr.Append(ctx, diags, err, smerr.ID, aws.ToString(output.VpcId))\n",
 		},
+		{
+			name: "sdkdiag.AppendErrorf should not corrupt subsequent d.Set calls",
+			input: `	if err := d.Set("lambda_config", flattenLambdaDataSourceConfig(dataSource.LambdaConfig)); err != nil {
+		return sdkdiag.AppendErrorf(diags, "setting lambda_config: %s", err)
+	}
+	d.Set(names.AttrName, dataSource.Name)`,
+			expected: `	if err := d.Set("lambda_config", flattenLambdaDataSourceConfig(dataSource.LambdaConfig)); err != nil {
+		return smerr.Append(ctx, diags, err)
+	}
+	d.Set(names.AttrName, dataSource.Name)`,
+		},
 	}
 
 	for _, tt := range tests {

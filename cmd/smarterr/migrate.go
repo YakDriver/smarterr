@@ -238,10 +238,11 @@ func migratePatterns(content string) string {
 		ReplaceAllString(content, `smerr.Append(ctx, $1, $2)`)
 
 	// 10. SDKv2 patterns - sdkdiag.AppendErrorf (more specific to avoid breaking other append calls)
-	content = regexp.MustCompile(`(?m)sdkdiag\.AppendErrorf\(([^,]+),\s*"[^"]*",\s*([^,]+),\s*([^)]+)\)$`).
+	// Use [^,\n]+ to avoid matching across lines or argument boundaries, but allow parentheses
+	content = regexp.MustCompile(`(?m)sdkdiag\.AppendErrorf\(([^,]+),\s*"[^"]*",\s*([^,\n]+),\s*([^,\n]+)\)$`).
 		ReplaceAllString(content, `smerr.Append(ctx, $1, $3, smerr.ID, $2)`)
 
-	content = regexp.MustCompile(`(?m)sdkdiag\.AppendErrorf\(([^,]+),\s*"[^"]*",\s*([^)]+)\)$`).
+	content = regexp.MustCompile(`(?m)sdkdiag\.AppendErrorf\(([^,]+),\s*"[^"]*",\s*([^,\n]+)\)$`).
 		ReplaceAllString(content, `smerr.Append(ctx, $1, $2)`)
 
 	// 11. create.AppendDiagError patterns (more specific)
