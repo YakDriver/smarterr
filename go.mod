@@ -1,6 +1,6 @@
 module github.com/YakDriver/smarterr
 
-go 1.25.3
+go 1.24.2
 
 require (
 	github.com/hashicorp/hcl/v2 v2.24.0
