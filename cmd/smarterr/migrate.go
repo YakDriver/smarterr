@@ -133,6 +133,13 @@ func migrateFile(filename string) error {
 		fmt.Printf("Warning: goimports failed for %s: %v\n", filename, err)
 	}
 
+	// Run gofmt to ensure proper formatting
+	cmd = exec.Command("gofmt", "-w", filename)
+	if err := cmd.Run(); err != nil {
+		// Non-fatal: warn but continue
+		fmt.Printf("Warning: gofmt failed for %s: %v\n", filename, err)
+	}
+
 	fmt.Printf("Migrated: %s\n", filename)
 	return nil
 }
@@ -146,6 +153,8 @@ func needsMigration(content string) bool {
 		`create\.AppendDiagError`,
 		`create\.AddError`,
 		`create\.ProblemStandardMessage`,
+		`return.*fmt\.Errorf`,
+		`return nil, "", err`,
 		`(?m)return nil, err$`, // Use multiline mode
 		`return nil, &retry\.NotFoundError`,
 		`return nil, tfresource\.NewEmptyResultError`,
@@ -256,6 +265,14 @@ func migratePatterns(content string) string {
 	// 12. create.AddError patterns (more specific)
 	content = regexp.MustCompile(`(?m)create\.AddError\(&([^,]+),\s*[^)]*\)$`).
 		ReplaceAllString(content, `smerr.AddError(ctx, &$1, err, smerr.ID, id)`)
+
+	// 13. Helper function fmt.Errorf patterns - replace with smarterr.NewError
+	content = regexp.MustCompile(`(\s+)return fmt\.Errorf\(.*,\s*([^)]+)\)`).
+		ReplaceAllString(content, `${1}return smarterr.NewError($2)`)
+
+	// 14. StateRefreshFunc error patterns - replace with smarterr.NewError
+	content = regexp.MustCompile(`(?m)(\s+)return nil, "", err$`).
+		ReplaceAllString(content, `${1}return nil, "", smarterr.NewError(err)`)
 
 	return content
 }

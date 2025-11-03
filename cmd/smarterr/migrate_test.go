@@ -129,6 +129,71 @@ func TestMigratePatterns_BareErrorReturns(t *testing.T) {
 	}
 }
 
+func TestMigratePatterns_FmtErrorf(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "simple fmt.Errorf with error",
+			input:    "\treturn fmt.Errorf(\"creating resource: %w\", err)\n",
+			expected: "\treturn smarterr.NewError(err)\n",
+		},
+		{
+			name:     "fmt.Errorf with complex message and error",
+			input:    "\t\treturn fmt.Errorf(\"creating AppSync GraphQL API (%s) schema: %w\", apiID, err)\n",
+			expected: "\t\treturn smarterr.NewError(err)\n",
+		},
+		{
+			name:     "should not change fmt.Errorf without error parameter",
+			input:    "\treturn fmt.Errorf(\"static error message\")\n",
+			expected: "\treturn fmt.Errorf(\"static error message\")\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := migratePatterns(tt.input)
+			if result != tt.expected {
+				t.Errorf("migratePatterns() =\n%q\nwant:\n%q", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestMigratePatterns_StateRefreshFunc(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "StateRefreshFunc bare error return",
+			input:    "\t\t\treturn nil, \"\", err\n",
+			expected: "\t\t\treturn nil, \"\", smarterr.NewError(err)\n",
+		},
+		{
+			name: "StateRefreshFunc in context",
+			input: `		if err != nil {
+			return nil, "", err
+		}`,
+			expected: `		if err != nil {
+			return nil, "", smarterr.NewError(err)
+		}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := migratePatterns(tt.input)
+			if result != tt.expected {
+				t.Errorf("migratePatterns() =\n%q\nwant:\n%q", result, tt.expected)
+			}
+		})
+	}
+}
+
 func TestMigratePatterns_RetryNotFoundError(t *testing.T) {
 	tests := []struct {
 		name     string
