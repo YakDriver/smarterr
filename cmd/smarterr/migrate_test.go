@@ -354,6 +354,14 @@ func TestMigratePatterns_Framework_AddError(t *testing.T) {
 			input:    "\tcreate.AddError(&response.Diagnostics, names.EC2, create.ErrActionCreating, ResNameVPC, id, err)\n",
 			expected: "\tsmerr.AddError(ctx, &response.Diagnostics, err, smerr.ID, id)\n",
 		},
+		{
+			name: "response.Diagnostics.AddError with create.ProblemStandardMessage",
+			input: `		response.Diagnostics.AddError(
+			create.ProblemStandardMessage(names.AppSync, create.ErrActionCreating, resNameSourceAPIAssociation, plan.MergedAPIID.String(), err),
+			err.Error(),
+		)`,
+			expected: `		smerr.AddError(ctx, &response.Diagnostics, err, smerr.ID, plan.MergedAPIID.String())`,
+		},
 	}
 
 	for _, tt := range tests {

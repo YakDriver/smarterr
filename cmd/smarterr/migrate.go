@@ -145,6 +145,7 @@ func needsMigration(content string) bool {
 		`sdkdiag\.AppendErrorf`,
 		`create\.AppendDiagError`,
 		`create\.AddError`,
+		`create\.ProblemStandardMessage`,
 		`(?m)return nil, err$`, // Use multiline mode
 		`return nil, &retry\.NotFoundError`,
 		`return nil, tfresource\.NewEmptyResultError`,
@@ -232,6 +233,9 @@ func migratePatterns(content string) string {
 	// 8. Framework patterns - response.Diagnostics.AddError (simple single line)
 	content = regexp.MustCompile(`(?m)(\s+)response\.Diagnostics\.AddError\(\s*"([^"]*)",\s*([^)]+)\.Error\(\)\s*\)$`).
 		ReplaceAllString(content, `${1}smerr.AddError(ctx, &response.Diagnostics, $3)`)
+
+	// 8b. Framework patterns - response.Diagnostics.AddError with create.ProblemStandardMessage
+	content = replaceCreateProblemStandardMessage(content)
 
 	// 9. SDKv2 patterns - sdkdiag.AppendFromErr
 	content = regexp.MustCompile(`sdkdiag\.AppendFromErr\(([^,]+),\s*([^)]+)\)`).
@@ -322,4 +326,11 @@ func replaceFwdiagAppend(content string) string {
 		// Otherwise, don't replace (regex didn't capture properly)
 		return match
 	})
+}
+
+// replaceCreateProblemStandardMessage handles response.Diagnostics.AddError with create.ProblemStandardMessage
+func replaceCreateProblemStandardMessage(content string) string {
+	// Match multi-line create.ProblemStandardMessage pattern
+	re := regexp.MustCompile(`(?s)(\s+)response\.Diagnostics\.AddError\(\s*create\.ProblemStandardMessage\([^,]+,\s*[^,]+,\s*[^,]+,\s*([^,]+),\s*([^)]+)\),\s*([^,]+)\.Error\(\),?\s*\)`)
+	return re.ReplaceAllString(content, `${1}smerr.AddError(ctx, &response.Diagnostics, $3, smerr.ID, $2)`)
 }
