@@ -301,22 +301,16 @@ func TestMigratePatterns_CreateAppendDiagError(t *testing.T) {
 			expected: "\treturn smerr.Append(ctx, diags, err, smerr.ID, id)\n",
 		},
 		{
-			name:  "create.AppendDiagError with aws.ToString",
-			input: "\treturn create.AppendDiagError(diags, names.EC2, create.ErrActionCreating, ResNameVPC, aws.ToString(output.VpcId), err)\n",
-			// Note: The pattern doesn't preserve the complex ID expression, it uses the generic `id` placeholder
-			// This is acceptable as a simplification - users may need to manually fix complex ID expressions
+			name:     "create.AppendDiagError with aws.ToString",
+			input:    "\treturn create.AppendDiagError(diags, names.EC2, create.ErrActionCreating, ResNameVPC, aws.ToString(output.VpcId), err)\n",
 			expected: "\treturn smerr.Append(ctx, diags, err, smerr.ID, id)\n",
-			// For now, mark this as expected to not change (pattern doesn't match complex expressions in last two args)
-			// In the future, we could enhance the pattern to extract and preserve the ID expression
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := migratePatterns(tt.input)
-			// For the aws.ToString case, we accept that it doesn't match (pattern is too simple)
 			if tt.name == "create.AppendDiagError with aws.ToString" {
-				// This test documents current behavior - pattern doesn't match complex cases
 				if result == tt.input {
 					t.Skip("Pattern correctly doesn't match complex expressions - this is expected behavior")
 				}
@@ -340,7 +334,7 @@ func TestMigratePatterns_Framework_AddError(t *testing.T) {
 			expected: "\tsmerr.AddError(ctx, &response.Diagnostics, err)\n",
 		},
 		{
-			name:     "response.Diagnostics.AddError with sprintf",
+			name:     "response.Diagnostics.AddError with fmt.Sprintf and ID",
 			input:    "\tresponse.Diagnostics.AddError(fmt.Sprintf(\"Reading VPC (%s)\", id), err.Error())\n",
 			expected: "\tresponse.Diagnostics.AddError(fmt.Sprintf(\"Reading VPC (%s)\", id), err.Error())\n",
 		},
@@ -368,12 +362,12 @@ func TestMigratePatterns_Framework_Append(t *testing.T) {
 		expected string
 	}{
 		{
-			name:     "response.Diagnostics.Append with function call",
+			name:     "response.Diagnostics.Append with function call and variadic",
 			input:    "\tresponse.Diagnostics.Append(someFunc()...)\n",
 			expected: "\tsmerr.EnrichAppend(ctx, &response.Diagnostics, someFunc())\n",
 		},
 		{
-			name:     "response.Diagnostics.Append with fwdiag.NewResourceNotFoundWarningDiagnostic",
+			name:     "response.Diagnostics.Append with single diagnostic (fwdiag)",
 			input:    "\tresponse.Diagnostics.Append(fwdiag.NewResourceNotFoundWarningDiagnostic(err))\n",
 			expected: "\tsmerr.EnrichAppendDiagnostic(ctx, &response.Diagnostics, fwdiag.NewResourceNotFoundWarningDiagnostic(err))\n",
 		},
@@ -381,6 +375,11 @@ func TestMigratePatterns_Framework_Append(t *testing.T) {
 			name:     "response.Diagnostics.Append with fwdiag.NewAttributeErrorDiagnostic",
 			input:    "\tresponse.Diagnostics.Append(fwdiag.NewAttributeErrorDiagnostic(path.Root(\"vpc_id\"), \"Invalid VPC ID\", err.Error()))\n",
 			expected: "\tsmerr.EnrichAppendDiagnostic(ctx, &response.Diagnostics, fwdiag.NewAttributeErrorDiagnostic(path.Root(\"vpc_id\"), \"Invalid VPC ID\", err.Error()))\n",
+		},
+		{
+			name:     "response.Diagnostics.Append with generic single diagnostic variable",
+			input:    "\tresponse.Diagnostics.Append(singleDiagnostic)\n",
+			expected: "\tresponse.Diagnostics.Append(singleDiagnostic)\n",
 		},
 	}
 
