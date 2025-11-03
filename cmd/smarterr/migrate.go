@@ -154,6 +154,7 @@ func needsMigration(content string) bool {
 		`create\.AddError`,
 		`create\.ProblemStandardMessage`,
 		`return.*fmt\.Errorf`,
+		`fmt\.Errorf.*(?i)unexpected format`,
 		`return nil, "", err`,
 		`(?m)return nil, err$`, // Use multiline mode
 		`return nil, &retry\.NotFoundError`,
@@ -273,6 +274,10 @@ func migratePatterns(content string) string {
 	// 14. StateRefreshFunc error patterns - replace with smarterr.NewError
 	content = regexp.MustCompile(`(?m)(\s+)return nil, "", err$`).
 		ReplaceAllString(content, `${1}return nil, "", smarterr.NewError(err)`)
+
+	// 15. Unexpected format error patterns - wrap fmt.Errorf with smarterr.NewError
+	content = regexp.MustCompile(`(?mi)(\s+return .+, )(fmt\.Errorf\("[^"]*unexpected format[^"]*".*?\))$`).
+		ReplaceAllString(content, `${1}smarterr.NewError($2)`)
 
 	return content
 }

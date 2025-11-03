@@ -194,6 +194,34 @@ func TestMigratePatterns_StateRefreshFunc(t *testing.T) {
 	}
 }
 
+func TestMigratePatterns_UnexpectedFormatError(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "unexpected format fmt.Errorf with smarterr.NewError wrap",
+			input:    "\t\treturn \"\", \"\", fmt.Errorf(\"unexpected format for resource (%s)\", id)\n",
+			expected: "\t\treturn \"\", \"\", smarterr.NewError(fmt.Errorf(\"unexpected format for resource (%s)\", id))\n",
+		},
+		{
+			name:     "case insensitive unexpected format",
+			input:    "\treturn \"\", fmt.Errorf(\"Unexpected Format in resource\", id)\n",
+			expected: "\treturn \"\", smarterr.NewError(fmt.Errorf(\"Unexpected Format in resource\", id))\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := migratePatterns(tt.input)
+			if result != tt.expected {
+				t.Errorf("migratePatterns() =\n%q\nwant:\n%q", result, tt.expected)
+			}
+		})
+	}
+}
+
 func TestMigratePatterns_RetryNotFoundError(t *testing.T) {
 	tests := []struct {
 		name     string
