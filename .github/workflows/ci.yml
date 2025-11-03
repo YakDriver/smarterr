@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go-version: [ '1.23', '1.24' ]
+        go-version: [ '1.24', '1.25' ]
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -44,6 +44,7 @@ jobs:
           fi
 
       - name: Modern Go code check
+        if: matrix.go-version == '1.25'
         run: make modern-check
 
       - name: Build
@@ -69,6 +70,7 @@ jobs:
         run: make coverage-internal-check
 
       - name: Test coverage for root and CLI (report only)
+        if: matrix.go-version == '1.25'
         run: make coverage-root-cli
 
   new-go-checks:
