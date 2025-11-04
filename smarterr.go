@@ -50,7 +50,7 @@ func SetFS(fs FileSystem, baseDir string) {
 	wrappedBaseDir = baseDir
 }
 
-// EnrichAppend is a helper function that enriches diagnostics with smarterr information.
+// EnrichAppend is a plugin Framework helper function that enriches diagnostics with smarterr information.
 // This will not change the severity of either incoming or existing diagnostics, but will change
 // the summary and detail of _incoming_ diagnostics only with smarterr information.
 // Mutates the diagnostics in place via pointer, matching the framework pattern.
@@ -227,6 +227,36 @@ func Append(ctx context.Context, diags sdkdiag.Diagnostics, err error, keyvals .
 		})
 	}, err, keyvals...)
 	return diags
+}
+
+// AppendOne appends a single diagnostic to existing Framework diagnostics with enrichment
+func AppendOne(ctx context.Context, existing *fwdiag.Diagnostics, incoming fwdiag.Diagnostic, keyvals ...any) {
+	// Create a temporary diagnostics slice with the single diagnostic
+	tempDiags := fwdiag.Diagnostics{incoming}
+	// Use existing EnrichAppend to handle the enrichment
+	EnrichAppend(ctx, existing, tempDiags, keyvals...)
+}
+
+// AppendEnrich appends incoming SDK diagnostics to existing SDK diagnostics with enrichment
+func AppendEnrich(ctx context.Context, existing sdkdiag.Diagnostics, incoming sdkdiag.Diagnostics, keyvals ...any) sdkdiag.Diagnostics {
+	// If incoming is empty, return existing as-is
+	if len(incoming) == 0 {
+		return existing
+	}
+
+	// For each diagnostic in incoming, enrich it and append to existing
+	for _, diag := range incoming {
+		// Convert the diagnostic to an error-like structure for enrichment
+		var err error
+		if diag.Summary != "" || diag.Detail != "" {
+			err = fmt.Errorf("%s: %s", diag.Summary, diag.Detail)
+		}
+
+		// Use existing Append logic to enrich and add
+		existing = Append(ctx, existing, err, keyvals...)
+	}
+
+	return existing
 }
 
 func globalCallID(ctx context.Context) (context.Context, string) {
