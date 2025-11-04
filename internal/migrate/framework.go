@@ -12,8 +12,13 @@ func CreateFrameworkPatterns() PatternGroup {
 		Order: 3,
 		Patterns: []Pattern{
 			{
+				Name:        "DeprecatedEnrichAppend",
+				Description: "smerr.EnrichAppend(...) -> smerr.AddEnrich(...)",
+				Replace:     replaceDeprecatedEnrichAppend,
+			},
+			{
 				Name:        "VariadicAppend",
-				Description: "response.Diagnostics.Append(...) -> smerr.EnrichAppend(...)",
+				Description: "response.Diagnostics.Append(...) -> smerr.AddEnrich(...)",
 				Replace:     replaceVariadicAppend,
 			},
 			{
@@ -36,6 +41,12 @@ func CreateFrameworkPatterns() PatternGroup {
 	}
 }
 
+// replaceDeprecatedEnrichAppend handles deprecated smerr.EnrichAppend usage
+func replaceDeprecatedEnrichAppend(content string) string {
+	re := regexp.MustCompile(`(?m)(\s+)smerr\.EnrichAppend\(`)
+	return re.ReplaceAllString(content, `${1}smerr.AddEnrich(`)
+}
+
 // replaceVariadicAppend handles response.Diagnostics.Append with ... variadic operator
 func replaceVariadicAppend(content string) string {
 	re := regexp.MustCompile(`(?m)(\s+)response\.Diagnostics\.Append\((.+)\.\.\.\)$`)
@@ -48,8 +59,8 @@ func replaceVariadicAppend(content string) string {
 		indent := submatches[1]
 		arg := submatches[2]
 
-		// Replace with smerr.EnrichAppend
-		return indent + "smerr.EnrichAppend(ctx, &response.Diagnostics, " + arg + ")"
+		// Replace with smerr.AddEnrich (updated from deprecated EnrichAppend)
+		return indent + "smerr.AddEnrich(ctx, &response.Diagnostics, " + arg + ")"
 	})
 }
 

@@ -11,6 +11,12 @@ func CreateBareErrorPatterns() PatternGroup {
 		Order: 1,
 		Patterns: []Pattern{
 			{
+				Name:        "DeprecatedSmarterrEnrichAppend",
+				Description: "smarterr.EnrichAppend(...) -> smarterr.AddEnrich(...)",
+				Regex:       regexp.MustCompile(`(?m)(\s+)smarterr\.EnrichAppend\(`),
+				Template:    `${1}smarterr.AddEnrich(`,
+			},
+			{
 				Name:        "SimpleReturn",
 				Description: "return nil, err -> return nil, smarterr.NewError(err)",
 				Regex:       regexp.MustCompile(`(?m)(\s+)return nil, err$`),

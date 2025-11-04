@@ -68,7 +68,7 @@ func test() {
 
 func test() {
 	if !d.IsNewResource() && intretry.NotFound(err) {
-		smerr.AppendOne(ctx, diags, sdkdiag.NewResourceNotFoundWarningDiagnostic(err))
+		smerr.AppendOne(ctx, diags, sdkdiag.NewResourceNotFoundWarningDiagnostic(err), smerr.ID, d.Id())
 		d.SetId("")
 		return diags
 	}
@@ -110,6 +110,81 @@ func test() {
 func test() {
 	if intretry.NotFound(err) && !d.IsNewResource() {
 		log.Printf("[WARN] Resource not found")
+		return diags
+	}
+}`,
+		},
+		{
+			name: "datasource.go reproduction test",
+			input: `package test
+
+func test() {
+	dataSource, err := findDataSourceByTwoPartKey(ctx, conn, apiID, name)
+
+	if tfresource.NotFound(err) && !d.IsNewResource() {
+		log.Printf("[WARN] AppSync Datasource %q not found, removing from state", d.Id())
+		d.SetId("")
+		return diags
+	}
+
+	if err != nil {
+		return sdkdiag.AppendErrorf(diags, "reading Appsync Data Source (%s): %s", d.Id(), err)
+	}
+}`,
+			expected: `package test
+
+func test() {
+	dataSource, err := findDataSourceByTwoPartKey(ctx, conn, apiID, name)
+
+	if !d.IsNewResource() && intretry.NotFound(err) {
+		smerr.AppendOne(ctx, diags, sdkdiag.NewResourceNotFoundWarningDiagnostic(err), smerr.ID, d.Id())
+		d.SetId("")
+		return diags
+	}
+
+	if err != nil {
+		return sdkdiag.AppendErrorf(diags, "reading Appsync Data Source (%s): %s", d.Id(), err)
+	}
+}`,
+		},
+		{
+			name: "log.Printf with d.Id() should include ID in replacement",
+			input: `package test
+
+func test() {
+	if intretry.NotFound(err) && !d.IsNewResource() {
+		log.Printf("[WARN] Resource %s not found", d.Id())
+		d.SetId("")
+		return diags
+	}
+}`,
+			expected: `package test
+
+func test() {
+	if !d.IsNewResource() && intretry.NotFound(err) {
+		smerr.AppendOne(ctx, diags, sdkdiag.NewResourceNotFoundWarningDiagnostic(err), smerr.ID, d.Id())
+		d.SetId("")
+		return diags
+	}
+}`,
+		},
+		{
+			name: "log.Printf without d.Id() should not include ID",
+			input: `package test
+
+func test() {
+	if intretry.NotFound(err) && !d.IsNewResource() {
+		log.Printf("[WARN] Resource not found")
+		d.SetId("")
+		return diags
+	}
+}`,
+			expected: `package test
+
+func test() {
+	if !d.IsNewResource() && intretry.NotFound(err) {
+		smerr.AppendOne(ctx, diags, sdkdiag.NewResourceNotFoundWarningDiagnostic(err))
+		d.SetId("")
 		return diags
 	}
 }`,

@@ -29,7 +29,25 @@ func replaceSDKResourceNotFoundAST(content string) string {
 		return content
 	}
 
-	return buf.String()
+	result := buf.String()
+	
+	// Post-process to remove extra blank lines before closing braces
+	// This fixes the formatting issue where AST transformation adds unwanted whitespace
+	lines := strings.Split(result, "\n")
+	var cleaned []string
+	
+	for i, line := range lines {
+		// Skip blank lines that appear right before a closing brace
+		if strings.TrimSpace(line) == "" && i+1 < len(lines) {
+			nextLine := strings.TrimSpace(lines[i+1])
+			if nextLine == "}" || nextLine == "})" {
+				continue // Skip this blank line
+			}
+		}
+		cleaned = append(cleaned, line)
+	}
+	
+	return strings.Join(cleaned, "\n")
 }
 
 type sdkResourceNotFoundTransformer struct {
@@ -89,7 +107,8 @@ func (t *sdkResourceNotFoundTransformer) isIntretryNotFoundCall(expr ast.Expr) b
 	}
 
 	ident, ok := sel.X.(*ast.Ident)
-	return ok && ident.Name == "intretry" && sel.Sel.Name == "NotFound"
+	// Handle both tfresource.NotFound and intretry.NotFound
+	return ok && (ident.Name == "intretry" || ident.Name == "tfresource") && sel.Sel.Name == "NotFound"
 }
 
 func (t *sdkResourceNotFoundTransformer) isNotIsNewResourceCall(expr ast.Expr) bool {
@@ -123,6 +142,10 @@ func (t *sdkResourceNotFoundTransformer) isLogPrintfCall(stmt ast.Stmt) bool {
 		return false
 	}
 
+	return t.isLogPrintfCallExpr(call)
+}
+
+func (t *sdkResourceNotFoundTransformer) isLogPrintfCallExpr(call *ast.CallExpr) bool {
 	sel, ok := call.Fun.(*ast.SelectorExpr)
 	if !ok {
 		return false
@@ -130,6 +153,41 @@ func (t *sdkResourceNotFoundTransformer) isLogPrintfCall(stmt ast.Stmt) bool {
 
 	ident, ok := sel.X.(*ast.Ident)
 	return ok && ident.Name == "log" && sel.Sel.Name == "Printf"
+}
+
+func (t *sdkResourceNotFoundTransformer) containsDIdCall(call *ast.CallExpr) bool {
+	// Walk through all arguments to find d.Id() calls
+	for _, arg := range call.Args {
+		if t.containsDIdInExpr(arg) {
+			return true
+		}
+	}
+	return false
+}
+
+func (t *sdkResourceNotFoundTransformer) containsDIdInExpr(expr ast.Expr) bool {
+	switch e := expr.(type) {
+	case *ast.CallExpr:
+		// Check if this is d.Id()
+		if sel, ok := e.Fun.(*ast.SelectorExpr); ok {
+			if ident, ok := sel.X.(*ast.Ident); ok && ident.Name == "d" && sel.Sel.Name == "Id" {
+				return true
+			}
+		}
+		// Recursively check arguments
+		for _, arg := range e.Args {
+			if t.containsDIdInExpr(arg) {
+				return true
+			}
+		}
+	case *ast.BinaryExpr:
+		return t.containsDIdInExpr(e.X) || t.containsDIdInExpr(e.Y)
+	case *ast.UnaryExpr:
+		return t.containsDIdInExpr(e.X)
+	case *ast.ParenExpr:
+		return t.containsDIdInExpr(e.X)
+	}
+	return false
 }
 
 func (t *sdkResourceNotFoundTransformer) isSetIdEmptyCall(stmt ast.Stmt) bool {
@@ -194,26 +252,59 @@ func (t *sdkResourceNotFoundTransformer) transformIfStatement(ifStmt *ast.IfStmt
 		},
 	}
 
+	// Preserve the original block structure to avoid extra whitespace
+	originalBody := ifStmt.Body
+	
+	// Extract ID from the original log.Printf call if present
+	var idArgs []ast.Expr
+	if len(originalBody.List) > 0 {
+		if exprStmt, ok := originalBody.List[0].(*ast.ExprStmt); ok {
+			if call, ok := exprStmt.X.(*ast.CallExpr); ok {
+				if t.isLogPrintfCallExpr(call) && t.containsDIdCall(call) {
+					// Add smerr.ID and d.Id() to preserve the resource ID
+					idArgs = []ast.Expr{
+						&ast.SelectorExpr{
+							X:   &ast.Ident{Name: "smerr"},
+							Sel: &ast.Ident{Name: "ID"},
+						},
+						&ast.CallExpr{
+							Fun: &ast.SelectorExpr{
+								X:   &ast.Ident{Name: "d"},
+								Sel: &ast.Ident{Name: "Id"},
+							},
+						},
+					}
+				}
+			}
+		}
+	}
+	
+	// Create base arguments for smerr.AppendOne
+	baseArgs := []ast.Expr{
+		&ast.Ident{Name: "ctx"},
+		&ast.Ident{Name: "diags"},
+		&ast.CallExpr{
+			Fun: &ast.SelectorExpr{
+				X:   &ast.Ident{Name: "sdkdiag"},
+				Sel: &ast.Ident{Name: "NewResourceNotFoundWarningDiagnostic"},
+			},
+			Args: []ast.Expr{&ast.Ident{Name: "err"}},
+		},
+	}
+	
+	// Append ID arguments if found
+	allArgs := append(baseArgs, idArgs...)
+	
 	// Create new body statements
-	ifStmt.Body.List = []ast.Stmt{
-		// smerr.AppendOne(ctx, diags, sdkdiag.NewResourceNotFoundWarningDiagnostic(err))
+	newStmts := []ast.Stmt{
+		// smerr.AppendOne(ctx, diags, sdkdiag.NewResourceNotFoundWarningDiagnostic(err)[, smerr.ID, d.Id()])
 		&ast.ExprStmt{
 			X: &ast.CallExpr{
 				Fun: &ast.SelectorExpr{
 					X:   &ast.Ident{Name: "smerr"},
 					Sel: &ast.Ident{Name: "AppendOne"},
 				},
-				Args: []ast.Expr{
-					&ast.Ident{Name: "ctx"},
-					&ast.Ident{Name: "diags"},
-					&ast.CallExpr{
-						Fun: &ast.SelectorExpr{
-							X:   &ast.Ident{Name: "sdkdiag"},
-							Sel: &ast.Ident{Name: "NewResourceNotFoundWarningDiagnostic"},
-						},
-						Args: []ast.Expr{&ast.Ident{Name: "err"}},
-					},
-				},
+				Args: allArgs,
 			},
 		},
 		// d.SetId("")
@@ -231,4 +322,7 @@ func (t *sdkResourceNotFoundTransformer) transformIfStatement(ifStmt *ast.IfStmt
 			Results: []ast.Expr{&ast.Ident{Name: "diags"}},
 		},
 	}
+	
+	// Update the body while preserving the original block structure
+	originalBody.List = newStmts
 }
