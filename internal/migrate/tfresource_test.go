@@ -4,15 +4,15 @@ import "testing"
 
 func TestCreateTfresourcePatterns(t *testing.T) {
 	patterns := CreateTfresourcePatterns()
-	
+
 	if patterns.Name != "TfresourcePatterns" {
 		t.Errorf("Expected name 'TfresourcePatterns', got %s", patterns.Name)
 	}
-	
+
 	if patterns.Order != 2 {
 		t.Errorf("Expected order 2, got %d", patterns.Order)
 	}
-	
+
 	if len(patterns.Patterns) == 0 {
 		t.Error("Expected patterns to be non-empty")
 	}
@@ -20,15 +20,15 @@ func TestCreateTfresourcePatterns(t *testing.T) {
 
 func TestReplaceTfresourceNotFound(t *testing.T) {
 	migrator := NewMigrator(MigratorOptions{})
-	
+
 	tests := []struct {
 		name     string
 		input    string
 		expected string
 	}{
 		{
-			name: "standalone fwdiag.NewResourceNotFoundWarningDiagnostic",
-			input: `	response.Diagnostics.Append(fwdiag.NewResourceNotFoundWarningDiagnostic(err))`,
+			name:     "standalone fwdiag.NewResourceNotFoundWarningDiagnostic",
+			input:    `	response.Diagnostics.Append(fwdiag.NewResourceNotFoundWarningDiagnostic(err))`,
 			expected: `	smerr.AddOne(ctx, &response.Diagnostics, fwdiag.NewResourceNotFoundWarningDiagnostic(err))`,
 		},
 		{

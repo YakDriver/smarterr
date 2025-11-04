@@ -4,15 +4,15 @@ import "testing"
 
 func TestCreateSDKv2Patterns(t *testing.T) {
 	patterns := CreateSDKv2Patterns()
-	
+
 	if patterns.Name != "SDKv2Patterns" {
 		t.Errorf("Expected name 'SDKv2Patterns', got %s", patterns.Name)
 	}
-	
+
 	if patterns.Order != 4 {
 		t.Errorf("Expected order 4, got %d", patterns.Order)
 	}
-	
+
 	if len(patterns.Patterns) == 0 {
 		t.Error("Expected patterns to be non-empty")
 	}
@@ -20,7 +20,7 @@ func TestCreateSDKv2Patterns(t *testing.T) {
 
 func TestSDKv2_AppendErrorf(t *testing.T) {
 	migrator := NewMigrator(MigratorOptions{})
-	
+
 	tests := []struct {
 		name     string
 		input    string

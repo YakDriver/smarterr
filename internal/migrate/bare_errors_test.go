@@ -4,15 +4,15 @@ import "testing"
 
 func TestCreateBareErrorPatterns(t *testing.T) {
 	patterns := CreateBareErrorPatterns()
-	
+
 	if patterns.Name != "BareErrorReturns" {
 		t.Errorf("Expected name 'BareErrorReturns', got %s", patterns.Name)
 	}
-	
+
 	if patterns.Order != 1 {
 		t.Errorf("Expected order 1, got %d", patterns.Order)
 	}
-	
+
 	if len(patterns.Patterns) == 0 {
 		t.Error("Expected patterns to be non-empty")
 	}

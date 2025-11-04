@@ -59,13 +59,13 @@ type ConflictResolution struct {
 // AddRequiredImports adds all required imports for smarterr migrations
 func (im *ImportManager) AddRequiredImports() string {
 	content := im.content
-	
+
 	for _, importSpec := range RequiredImports {
 		if !im.hasImport(importSpec.Path) {
 			content = im.addImport(content, importSpec)
 		}
 	}
-	
+
 	return content
 }
 
@@ -73,19 +73,19 @@ func (im *ImportManager) AddRequiredImports() string {
 func (im *ImportManager) ResolveImportConflicts() (string, map[string]string) {
 	content := im.content
 	prefixMappings := make(map[string]string)
-	
+
 	for conflictingPath, resolution := range ConflictingImports {
 		if im.hasImport(conflictingPath) && !im.hasImport(resolution.ConflictsWith) {
 			// Add the aliased import to resolve the conflict
 			content = im.addImport(content, resolution.Resolution)
-			
+
 			// Merge prefix mappings
 			for oldPrefix, newPrefix := range resolution.PrefixMapping {
 				prefixMappings[oldPrefix] = newPrefix
 			}
 		}
 	}
-	
+
 	return content, prefixMappings
 }
 
@@ -93,7 +93,7 @@ func (im *ImportManager) ResolveImportConflicts() (string, map[string]string) {
 func (im *ImportManager) GetRetryPrefix() string {
 	wrongRetry := "github.com/hashicorp/terraform-plugin-sdk/v2/helper/retry"
 	correctRetry := "github.com/hashicorp/terraform-provider-aws/internal/retry"
-	
+
 	if im.hasImport(wrongRetry) && !im.hasImport(correctRetry) {
 		return "intretry" // Use alias when there's a conflict
 	}
@@ -105,7 +105,7 @@ func (im *ImportManager) AddImportWithAlias(path, alias string) string {
 	if im.hasImport(path) {
 		return im.content
 	}
-	
+
 	return im.addImport(im.content, ImportSpec{Path: path, Name: alias})
 }
 
@@ -118,13 +118,13 @@ func (im *ImportManager) hasImport(path string) bool {
 		// Fallback to string matching if AST parsing fails
 		return strings.Contains(im.content, `"`+path+`"`)
 	}
-	
+
 	for _, imp := range file.Imports {
 		if imp.Path.Value == `"`+path+`"` {
 			return true
 		}
 	}
-	
+
 	return false
 }
 
@@ -136,9 +136,9 @@ func (im *ImportManager) addImport(content string, spec ImportSpec) string {
 	if len(matches) != 4 {
 		return content // No import block found
 	}
-	
+
 	imports := matches[2]
-	
+
 	// Construct import line with proper indentation (matching original behavior)
 	var importLine string
 	if spec.Name != "" {
@@ -146,9 +146,9 @@ func (im *ImportManager) addImport(content string, spec ImportSpec) string {
 	} else {
 		importLine = "\t" + `"` + spec.Path + `"` + "\n"
 	}
-	
+
 	imports += importLine
-	
+
 	// Reconstruct the import block (matching original behavior)
 	return strings.Replace(content, matches[0], matches[1]+imports+matches[3], 1)
 }
@@ -160,7 +160,7 @@ func (im *ImportManager) GetImports() ([]ImportInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	var imports []ImportInfo
 	for _, imp := range file.Imports {
 		info := ImportInfo{
@@ -171,7 +171,7 @@ func (im *ImportManager) GetImports() ([]ImportInfo, error) {
 		}
 		imports = append(imports, info)
 	}
-	
+
 	return imports, nil
 }
 
@@ -185,7 +185,7 @@ type ImportInfo struct {
 func (im *ImportManager) HasConflictingRetryImport() bool {
 	wrongRetry := "github.com/hashicorp/terraform-plugin-sdk/v2/helper/retry"
 	correctRetry := "github.com/hashicorp/terraform-provider-aws/internal/retry"
-	
+
 	return im.hasImport(wrongRetry) && !im.hasImport(correctRetry)
 }
 

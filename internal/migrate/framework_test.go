@@ -64,8 +64,8 @@ func TestCreateProblemStandardMessage(t *testing.T) {
 		expected string
 	}{
 		{
-			name: "single-line create.ProblemStandardMessage",
-			input: `		response.Diagnostics.AddError(create.ProblemStandardMessage(names.AppSync, create.ErrActionCreating, "test", "id", err), err.Error())`,
+			name:     "single-line create.ProblemStandardMessage",
+			input:    `		response.Diagnostics.AddError(create.ProblemStandardMessage(names.AppSync, create.ErrActionCreating, "test", "id", err), err.Error())`,
 			expected: `		smerr.AddError(ctx, &response.Diagnostics, err)`,
 		},
 		{

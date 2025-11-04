@@ -30,12 +30,12 @@ func replaceSDKResourceNotFoundAST(content string) string {
 	}
 
 	result := buf.String()
-	
+
 	// Post-process to remove extra blank lines before closing braces
 	// This fixes the formatting issue where AST transformation adds unwanted whitespace
 	lines := strings.Split(result, "\n")
 	var cleaned []string
-	
+
 	for i, line := range lines {
 		// Skip blank lines that appear right before a closing brace
 		if strings.TrimSpace(line) == "" && i+1 < len(lines) {
@@ -46,7 +46,7 @@ func replaceSDKResourceNotFoundAST(content string) string {
 		}
 		cleaned = append(cleaned, line)
 	}
-	
+
 	return strings.Join(cleaned, "\n")
 }
 
@@ -254,7 +254,7 @@ func (t *sdkResourceNotFoundTransformer) transformIfStatement(ifStmt *ast.IfStmt
 
 	// Preserve the original block structure to avoid extra whitespace
 	originalBody := ifStmt.Body
-	
+
 	// Extract ID from the original log.Printf call if present
 	var idArgs []ast.Expr
 	if len(originalBody.List) > 0 {
@@ -278,7 +278,7 @@ func (t *sdkResourceNotFoundTransformer) transformIfStatement(ifStmt *ast.IfStmt
 			}
 		}
 	}
-	
+
 	// Create base arguments for smerr.AppendOne
 	baseArgs := []ast.Expr{
 		&ast.Ident{Name: "ctx"},
@@ -291,10 +291,10 @@ func (t *sdkResourceNotFoundTransformer) transformIfStatement(ifStmt *ast.IfStmt
 			Args: []ast.Expr{&ast.Ident{Name: "err"}},
 		},
 	}
-	
+
 	// Append ID arguments if found
 	allArgs := append(baseArgs, idArgs...)
-	
+
 	// Create new body statements
 	newStmts := []ast.Stmt{
 		// smerr.AppendOne(ctx, diags, sdkdiag.NewResourceNotFoundWarningDiagnostic(err)[, smerr.ID, d.Id()])
@@ -322,7 +322,7 @@ func (t *sdkResourceNotFoundTransformer) transformIfStatement(ifStmt *ast.IfStmt
 			Results: []ast.Expr{&ast.Ident{Name: "diags"}},
 		},
 	}
-	
+
 	// Update the body while preserving the original block structure
 	originalBody.List = newStmts
 }

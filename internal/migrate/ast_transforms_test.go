@@ -194,7 +194,7 @@ func test() {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := replaceSDKResourceNotFoundAST(tt.input)
-			
+
 			// Normalize whitespace for comparison
 			normalizeWhitespace := func(s string) string {
 				lines := strings.Split(s, "\n")
@@ -206,7 +206,7 @@ func test() {
 				}
 				return strings.Join(normalized, "\n")
 			}
-			
+
 			if normalizeWhitespace(result) != normalizeWhitespace(tt.expected) {
 				t.Errorf("replaceSDKResourceNotFoundAST() =\n%s\n\nwant:\n%s", result, tt.expected)
 			}
@@ -266,7 +266,7 @@ func test() {
 	` + tt.input + `
 }`
 			result := replaceSDKResourceNotFoundAST(fullInput)
-			
+
 			// If pattern should match, result should be different from input
 			// If pattern shouldn't match, result should be same as input
 			changed := result != fullInput

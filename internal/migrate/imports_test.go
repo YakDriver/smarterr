@@ -222,15 +222,15 @@ func main() {}`
 
 func TestCreateImportPatterns(t *testing.T) {
 	patterns := CreateImportPatterns()
-	
+
 	if patterns.Name != "ImportPatterns" {
 		t.Errorf("Expected name 'ImportPatterns', got %s", patterns.Name)
 	}
-	
+
 	if patterns.Order != 0 {
 		t.Errorf("Expected order 0, got %d", patterns.Order)
 	}
-	
+
 	if len(patterns.Patterns) == 0 {
 		t.Error("Expected patterns to be non-empty")
 	}
