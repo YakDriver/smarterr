@@ -29,7 +29,7 @@ func TestReplaceTfresourceNotFound(t *testing.T) {
 		{
 			name: "standalone fwdiag.NewResourceNotFoundWarningDiagnostic",
 			input: `	response.Diagnostics.Append(fwdiag.NewResourceNotFoundWarningDiagnostic(err))`,
-			expected: `	smerr.AppendOne(ctx, &response.Diagnostics, fwdiag.NewResourceNotFoundWarningDiagnostic(err))`,
+			expected: `	smerr.AddOne(ctx, &response.Diagnostics, fwdiag.NewResourceNotFoundWarningDiagnostic(err))`,
 		},
 		{
 			name: "tfresource.NotFound with diagnostic",
@@ -39,7 +39,7 @@ func TestReplaceTfresourceNotFound(t *testing.T) {
 		return
 	}`,
 			expected: `	if retry.NotFound(err) {
-		smerr.AppendOne(ctx, &response.Diagnostics, fwdiag.NewResourceNotFoundWarningDiagnostic(err))
+		smerr.AddOne(ctx, &response.Diagnostics, fwdiag.NewResourceNotFoundWarningDiagnostic(err))
 		response.State.RemoveResource(ctx)
 		return
 	}`,

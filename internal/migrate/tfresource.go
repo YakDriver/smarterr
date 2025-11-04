@@ -16,6 +16,12 @@ func CreateTfresourcePatterns() PatternGroup {
 				Description: "tfresource.NotFound anti-patterns with proper import aliasing",
 				Replace:     replaceTfresourceNotFound,
 			},
+			{
+				Name:        "TfresourceNotFoundToIntretry",
+				Description: "tfresource.NotFound -> intretry.NotFound",
+				Regex:       regexp.MustCompile(`tfresource\.NotFound\(([^)]+)\)`),
+				Template:    `intretry.NotFound($1)`,
+			},
 		},
 	}
 }
@@ -45,7 +51,7 @@ func replaceTfresourceNotFound(content string) string {
 		baseIndent := strings.TrimLeft(indent, "\n")
 		// Preserve the original leading newlines
 		leadingNewlines := strings.TrimSuffix(indent, baseIndent)
-		return leadingNewlines + baseIndent + `if ` + retryPrefix + `.NotFound(err) {` + "\n" + baseIndent + "\t" + `smerr.AppendOne(ctx, &response.Diagnostics, fwdiag.NewResourceNotFoundWarningDiagnostic(err))` + "\n" + baseIndent + "\t" + `response.State.RemoveResource(ctx)` + "\n" + baseIndent + "\t" + `return` + "\n" + baseIndent + `}`
+		return leadingNewlines + baseIndent + `if ` + retryPrefix + `.NotFound(err) {` + "\n" + baseIndent + "\t" + `smerr.AddOne(ctx, &response.Diagnostics, fwdiag.NewResourceNotFoundWarningDiagnostic(err))` + "\n" + baseIndent + "\t" + `response.State.RemoveResource(ctx)` + "\n" + baseIndent + "\t" + `return` + "\n" + baseIndent + `}`
 	})
 
 	// Pattern 2: without diagnostic
@@ -60,12 +66,12 @@ func replaceTfresourceNotFound(content string) string {
 		baseIndent := strings.TrimLeft(indent, "\n")
 		// Preserve the original leading newlines
 		leadingNewlines := strings.TrimSuffix(indent, baseIndent)
-		return leadingNewlines + baseIndent + `if ` + retryPrefix + `.NotFound(err) {` + "\n" + baseIndent + "\t" + `smerr.AppendOne(ctx, &response.Diagnostics, fwdiag.NewResourceNotFoundWarningDiagnostic(err))` + "\n" + baseIndent + "\t" + `response.State.RemoveResource(ctx)` + "\n" + baseIndent + "\t" + `return` + "\n" + baseIndent + `}`
+		return leadingNewlines + baseIndent + `if ` + retryPrefix + `.NotFound(err) {` + "\n" + baseIndent + "\t" + `smerr.AddOne(ctx, &response.Diagnostics, fwdiag.NewResourceNotFoundWarningDiagnostic(err))` + "\n" + baseIndent + "\t" + `response.State.RemoveResource(ctx)` + "\n" + baseIndent + "\t" + `return` + "\n" + baseIndent + `}`
 	})
 
 	// Handle standalone fwdiag.NewResourceNotFoundWarningDiagnostic calls
 	content = regexp.MustCompile(`(?m)(\s+)response\.Diagnostics\.Append\(fwdiag\.NewResourceNotFoundWarningDiagnostic\(([^)]+)\)\)$`).
-		ReplaceAllString(content, `${1}smerr.AppendOne(ctx, &response.Diagnostics, fwdiag.NewResourceNotFoundWarningDiagnostic($2))`)
+		ReplaceAllString(content, `${1}smerr.AddOne(ctx, &response.Diagnostics, fwdiag.NewResourceNotFoundWarningDiagnostic($2))`)
 
 	return content
 }

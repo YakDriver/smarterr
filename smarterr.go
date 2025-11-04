@@ -50,26 +50,26 @@ func SetFS(fs FileSystem, baseDir string) {
 	wrappedBaseDir = baseDir
 }
 
-// EnrichAppend is a plugin Framework helper function that enriches diagnostics with smarterr information.
+// AddEnrich is a plugin Framework helper function that enriches diagnostics with smarterr information.
 // This will not change the severity of either incoming or existing diagnostics, but will change
 // the summary and detail of _incoming_ diagnostics only with smarterr information.
 // Mutates the diagnostics in place via pointer, matching the framework pattern.
 //
 // Template usage:
 //   - If you want to customize the output for framework-generated diagnostics (e.g., value conversion errors),
-//     define `diagnostic_summary` and `diagnostic_detail` templates in your config. These will be used by EnrichAppend.
+//     define `diagnostic_summary` and `diagnostic_detail` templates in your config. These will be used by AddEnrich.
 //   - If these templates are not defined, the original diagnostic summary and detail are used.
 //   - Note: All output is a diagnostic; the template name refers to the input type (error vs. diagnostic).
-func EnrichAppend(ctx context.Context, existing *fwdiag.Diagnostics, incoming fwdiag.Diagnostics, keyvals ...any) {
+func AddEnrich(ctx context.Context, existing *fwdiag.Diagnostics, incoming fwdiag.Diagnostics, keyvals ...any) {
 	ctx, callID := globalCallID(ctx)
 
 	// Debug will NOT be output until LoadConfigWithDiagnostics + the setting in the config
 	// enables it because without config we don't know if debug is enabled. Subsequent
 	// calls after config load will show debug if enabled.
-	Debugf("[EnrichAppend %s] called with len(incoming): %d, keyvals: %v", callID, len(incoming), keyvals)
+	Debugf("[AddEnrich %s] called with len(incoming): %d, keyvals: %v", callID, len(incoming), keyvals)
 	defer func() {
 		if r := recover(); r != nil {
-			Debugf("[EnrichAppend %s] Panic recovered: %v", callID, r)
+			Debugf("[AddEnrich %s] Panic recovered: %v", callID, r)
 			for _, diag := range incoming {
 				if diag == nil || existing.Contains(diag) {
 					continue
@@ -82,7 +82,7 @@ func EnrichAppend(ctx context.Context, existing *fwdiag.Diagnostics, incoming fw
 		return
 	}
 	if wrappedFS == nil {
-		Debugf("[EnrichAppend %s] No wrappedFS set; cannot enrich diagnostics", callID)
+		Debugf("[AddEnrich %s] No wrappedFS set; cannot enrich diagnostics", callID)
 		for _, diag := range incoming {
 			if diag == nil || existing.Contains(diag) {
 				continue
@@ -94,7 +94,7 @@ func EnrichAppend(ctx context.Context, existing *fwdiag.Diagnostics, incoming fw
 	relStackPaths := collectRelStackPaths(ctx, wrappedBaseDir)
 	cfg, cfgErr := internal.LoadConfig(ctx, wrappedFS, relStackPaths, wrappedBaseDir)
 	if cfgErr != nil {
-		Debugf("[EnrichAppend %s] Config load error: %v", callID, cfgErr)
+		Debugf("[AddEnrich %s] Config load error: %v", callID, cfgErr)
 		for _, diag := range incoming {
 			if diag == nil || existing.Contains(diag) {
 				continue
@@ -103,7 +103,7 @@ func EnrichAppend(ctx context.Context, existing *fwdiag.Diagnostics, incoming fw
 		}
 		return
 	}
-	Debugf("[EnrichAppend %s] diagnostics, len(incoming): %d", callID, len(incoming))
+	Debugf("[AddEnrich %s] diagnostics, len(incoming): %d", callID, len(incoming))
 	for _, diag := range incoming {
 		if diag == nil {
 			continue
@@ -112,18 +112,18 @@ func EnrichAppend(ctx context.Context, existing *fwdiag.Diagnostics, incoming fw
 		if existing.Contains(diag) {
 			continue
 		}
-		Debugf("[EnrichAppend %s] enriching diagnostic: %+v", callID, diag)
+		Debugf("[AddEnrich %s] enriching diagnostic: %+v", callID, diag)
 		// Enrich: build runtime with diagnostic as a field, not in args
 		rt := internal.NewRuntimeForDiagnostic(ctx, cfg, diag, keyvals...)
 		values := rt.BuildTokenValueMap(ctx)
 		// Render summary/detail using diagnostic templates if present, else fallback to original
 		summary, detail := diag.Summary(), diag.Detail()
 		if s, err := cfg.RenderTemplate(ctx, DiagnosticSummaryKey, values); err == nil && s != "" {
-			Debugf("[EnrichAppend %s] rendered %s: %q", callID, DiagnosticSummaryKey, s)
+			Debugf("[AddEnrich %s] rendered %s: %q", callID, DiagnosticSummaryKey, s)
 			summary = s
 		}
 		if d, err := cfg.RenderTemplate(ctx, DiagnosticDetailKey, values); err == nil && d != "" {
-			Debugf("[EnrichAppend %s] rendered %s: %q", callID, DiagnosticDetailKey, d)
+			Debugf("[AddEnrich %s] rendered %s: %q", callID, DiagnosticDetailKey, d)
 			detail = d
 		}
 		// Create enriched diagnostic
@@ -139,6 +139,13 @@ func EnrichAppend(ctx context.Context, existing *fwdiag.Diagnostics, incoming fw
 			emitLogTemplates(ctx, cfg, values, diag.Severity().String())
 		}
 	}
+}
+
+// EnrichAppend is an alias for AddEnrich to maintain backward compatibility.
+//
+// Deprecated: Use AddEnrich instead to align with Framework "Add" verb convention
+func EnrichAppend(ctx context.Context, existing *fwdiag.Diagnostics, incoming fwdiag.Diagnostics, keyvals ...any) {
+	AddEnrich(ctx, existing, incoming, keyvals...)
 }
 
 // AddError adds a formatted error to Terraform Plugin Framework diagnostics.
@@ -229,12 +236,20 @@ func Append(ctx context.Context, diags sdkdiag.Diagnostics, err error, keyvals .
 	return diags
 }
 
-// AppendOne appends a single diagnostic to existing Framework diagnostics with enrichment
-func AppendOne(ctx context.Context, existing *fwdiag.Diagnostics, incoming fwdiag.Diagnostic, keyvals ...any) {
+// AddOne appends a single diagnostic to existing Framework diagnostics with enrichment
+func AddOne(ctx context.Context, existing *fwdiag.Diagnostics, incoming fwdiag.Diagnostic, keyvals ...any) {
 	// Create a temporary diagnostics slice with the single diagnostic
 	tempDiags := fwdiag.Diagnostics{incoming}
 	// Use existing EnrichAppend to handle the enrichment
 	EnrichAppend(ctx, existing, tempDiags, keyvals...)
+}
+
+// AppendOne appends a single diagnostic to existing SDK diagnostics with enrichment
+func AppendOne(ctx context.Context, existing sdkdiag.Diagnostics, incoming sdkdiag.Diagnostic, keyvals ...any) sdkdiag.Diagnostics {
+	// Create a temporary diagnostics slice with the single diagnostic
+	tempDiags := sdkdiag.Diagnostics{incoming}
+	// Use existing AppendEnrich to handle the enrichment
+	return AppendEnrich(ctx, existing, tempDiags, keyvals...)
 }
 
 // AppendEnrich appends incoming SDK diagnostics to existing SDK diagnostics with enrichment

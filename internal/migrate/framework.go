@@ -68,7 +68,7 @@ func replaceFwdiagAppend(content string) string {
 		
 		// Check if it's a single diagnostic call
 		if strings.Contains(fwdiagCall, "fwdiag.New") {
-			return indent + "smerr.AppendOne(ctx, &response.Diagnostics, " + fwdiagCall + ")"
+			return indent + "smerr.AddOne(ctx, &response.Diagnostics, " + fwdiagCall + ")"
 		}
 		
 		return match // Return unchanged if we can't handle it

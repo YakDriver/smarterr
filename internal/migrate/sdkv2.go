@@ -38,6 +38,11 @@ func CreateSDKv2Patterns() PatternGroup {
 				Regex:       regexp.MustCompile(`(?m)create\.AddError\(&([^,]+),\s*[^)]*\)$`),
 				Template:    `smerr.AddError(ctx, &$1, err, smerr.ID, id)`,
 			},
+			{
+				Name:        "SDKResourceNotFoundPattern",
+				Description: "SDK v2 resource not found pattern with warning diagnostic",
+				Replace:     replaceSDKResourceNotFoundAST,
+			},
 		},
 	}
 }
