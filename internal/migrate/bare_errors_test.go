@@ -42,3 +42,33 @@ func TestReplaceAssertSingleValueResult(t *testing.T) {
 		})
 	}
 }
+
+func TestNonNilReturn(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "return value, err",
+			input:    "\treturn output, err",
+			expected: "\treturn output, smarterr.NewError(err)",
+		},
+		{
+			name:     "return complex value, err",
+			input:    "\treturn result.Value, err",
+			expected: "\treturn result.Value, smarterr.NewError(err)",
+		},
+	}
+
+	migrator := NewMigrator(MigratorOptions{})
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := migrator.MigrateContent(tt.input)
+			if result != tt.expected {
+				t.Errorf("MigrateContent() = %q, want %q", result, tt.expected)
+			}
+		})
+	}
+}

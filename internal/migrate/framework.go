@@ -77,8 +77,13 @@ func replaceFwdiagAppend(content string) string {
 
 // replaceCreateProblemStandardMessage handles create.ProblemStandardMessage patterns
 func replaceCreateProblemStandardMessage(content string) string {
-	// Handle create.ProblemStandardMessage in AddError calls
-	re := regexp.MustCompile(`(?m)(\s+)response\.Diagnostics\.AddError\(\s*create\.ProblemStandardMessage\([^)]*\),\s*([^)]+)\)$`)
+	// Handle cases with err.Error() - both simple and complex nested parentheses
+	re1 := regexp.MustCompile(`(?s)(\s+)response\.Diagnostics\.AddError\(\s*create\.ProblemStandardMessage\([^)]*(?:\([^)]*\)[^)]*)*\),\s*([a-zA-Z_][a-zA-Z0-9_]*)\.Error\(\)\s*,?\s*\)`)
+	content = re1.ReplaceAllString(content, `${1}smerr.AddError(ctx, &response.Diagnostics, $2)`)
 	
-	return re.ReplaceAllString(content, `${1}smerr.AddError(ctx, &response.Diagnostics, $2)`)
+	// Handle cases with errors.New("...").Error()
+	re2 := regexp.MustCompile(`(?s)(\s+)response\.Diagnostics\.AddError\(\s*create\.ProblemStandardMessage\([^)]*(?:\([^)]*\)[^)]*)*\),\s*(errors\.New\([^)]*\))\.Error\(\)\s*,?\s*\)`)
+	content = re2.ReplaceAllString(content, `${1}smerr.AddError(ctx, &response.Diagnostics, $2)`)
+	
+	return content
 }
