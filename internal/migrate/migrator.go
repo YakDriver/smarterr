@@ -49,9 +49,15 @@ func (m *Migrator) MigrateContent(content string) string {
 		return cmp.Compare(a.Order, b.Order)
 	})
 
+	// Apply pattern transformations
 	for _, group := range m.patterns {
 		content = m.applyPatternGroup(content, group)
 	}
+
+	// Add required imports after transformations
+	importManager := NewImportManager(content)
+	content = importManager.AddRequiredImports()
+
 	return content
 }
 

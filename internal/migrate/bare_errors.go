@@ -53,6 +53,12 @@ func CreateBareErrorPatterns() PatternGroup {
 				Template:    `${1}return nil, smarterr.NewError(&retry.NotFoundError{LastError: $2, LastRequest: $3})`,
 			},
 			{
+				Name:        "FmtErrorfNewError",
+				Description: "return ..., fmt.Errorf(...) -> return ..., smarterr.NewError(fmt.Errorf(...))",
+				Regex:       regexp.MustCompile(`(\s+)return (.+), (fmt\.Errorf\([^)]+\))`),
+				Template:    `${1}return $2, smarterr.NewError($3)`,
+			},
+			{
 				Name:        "FmtErrorf",
 				Description: "return fmt.Errorf(..., err) -> return smarterr.NewError(err)",
 				Regex:       regexp.MustCompile(`(\s+)return fmt\.Errorf\(.*,\s*([^)]+)\)`),

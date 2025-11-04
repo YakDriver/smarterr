@@ -12,6 +12,8 @@ func NewMigrationDetector() *MigrationDetector {
 
 // MigrationPatterns defines the patterns that indicate code needs migration
 var MigrationPatterns = []string{
+	`smerr\.EnrichAppend`,
+	`smarterr\.EnrichAppend`,
 	`response\.Diagnostics\.Append`,
 	`response\.Diagnostics\.AddError`,
 	`sdkdiag\.AppendFromErr`,

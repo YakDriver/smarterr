@@ -28,6 +28,10 @@ var RequiredImports = []ImportSpec{
 		Path: "github.com/hashicorp/terraform-provider-aws/internal/smerr",
 		Name: "",
 	},
+	{
+		Path: "github.com/hashicorp/terraform-provider-aws/internal/errs/sdkdiag",
+		Name: "",
+	},
 }
 
 // ImportSpec represents an import specification
