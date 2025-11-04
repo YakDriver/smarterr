@@ -29,14 +29,12 @@ func CreateTfresourcePatterns() PatternGroup {
 // replaceTfresourceNotFound handles tfresource.NotFound anti-patterns and import aliasing
 func replaceTfresourceNotFound(content string) string {
 	im := NewImportManager(content)
-	
+
 	// Use the specialized retry prefix logic (preserves exact original behavior)
 	retryPrefix := im.GetRetryPrefix()
 	if im.HasConflictingRetryImport() {
 		// Need to add aliased import and use intretry prefix
 		content = im.AddAliasedRetryImport()
-		// Update the import manager with new content
-		im = NewImportManager(content)
 	}
 
 	// Pattern 1: with diagnostic
