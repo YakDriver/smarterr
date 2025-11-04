@@ -3,6 +3,7 @@ package migrate
 import (
 	"go/parser"
 	"go/token"
+	"maps"
 	"regexp"
 	"strings"
 )
@@ -80,9 +81,7 @@ func (im *ImportManager) ResolveImportConflicts() (string, map[string]string) {
 			content = im.addImport(content, resolution.Resolution)
 
 			// Merge prefix mappings
-			for oldPrefix, newPrefix := range resolution.PrefixMapping {
-				prefixMappings[oldPrefix] = newPrefix
-			}
+			maps.Copy(prefixMappings, resolution.PrefixMapping)
 		}
 	}
 

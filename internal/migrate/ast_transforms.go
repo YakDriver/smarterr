@@ -5,6 +5,7 @@ import (
 	"go/format"
 	"go/parser"
 	"go/token"
+	"slices"
 	"strings"
 )
 
@@ -157,12 +158,7 @@ func (t *sdkResourceNotFoundTransformer) isLogPrintfCallExpr(call *ast.CallExpr)
 
 func (t *sdkResourceNotFoundTransformer) containsDIdCall(call *ast.CallExpr) bool {
 	// Walk through all arguments to find d.Id() calls
-	for _, arg := range call.Args {
-		if t.containsDIdInExpr(arg) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(call.Args, t.containsDIdInExpr)
 }
 
 func (t *sdkResourceNotFoundTransformer) containsDIdInExpr(expr ast.Expr) bool {
@@ -175,10 +171,8 @@ func (t *sdkResourceNotFoundTransformer) containsDIdInExpr(expr ast.Expr) bool {
 			}
 		}
 		// Recursively check arguments
-		for _, arg := range e.Args {
-			if t.containsDIdInExpr(arg) {
-				return true
-			}
+		if slices.ContainsFunc(e.Args, t.containsDIdInExpr) {
+			return true
 		}
 	case *ast.BinaryExpr:
 		return t.containsDIdInExpr(e.X) || t.containsDIdInExpr(e.Y)
