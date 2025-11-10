@@ -28,6 +28,10 @@ var RequiredImports = []ImportSpec{
 		Path: "github.com/hashicorp/terraform-provider-aws/internal/smerr",
 		Name: "",
 	},
+	{
+		Path: "github.com/hashicorp/terraform-provider-aws/internal/errs/sdkdiag",
+		Name: "",
+	},
 }
 
 // ImportSpec represents an import specification
@@ -127,8 +131,31 @@ func (im *ImportManager) hasImport(path string) bool {
 	return false
 }
 
+// hasImportWithAlias checks if an import path already exists with a specific alias
+func (im *ImportManager) hasImportWithAlias(path, alias string) bool {
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "", im.content, parser.ImportsOnly)
+	if err != nil {
+		// Fallback to string matching
+		return strings.Contains(im.content, alias+` "`+path+`"`)
+	}
+
+	for _, imp := range file.Imports {
+		if imp.Path.Value == `"`+path+`"` && imp.Name != nil && imp.Name.Name == alias {
+			return true
+		}
+	}
+	return false
+}
+
 // addImport adds a single import to the content using the same logic as the original
 func (im *ImportManager) addImport(content string, spec ImportSpec) string {
+	// Check if import already exists to prevent duplicates
+	tempIM := NewImportManager(content)
+	if tempIM.hasImport(spec.Path) || (spec.Name != "" && tempIM.hasImportWithAlias(spec.Path, spec.Name)) {
+		return content
+	}
+
 	// Use the same regex pattern as the original addInternalRetryImport for consistency
 	importBlockPattern := regexp.MustCompile(`(import \(\n)((?:[^\)]*\n)*?)(\))`)
 	matches := importBlockPattern.FindStringSubmatch(content)

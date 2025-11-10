@@ -2,6 +2,7 @@ package migrate
 
 import (
 	"regexp"
+	"strings"
 )
 
 // CreateBareErrorPatterns creates patterns for bare error returns
@@ -53,6 +54,12 @@ func CreateBareErrorPatterns() PatternGroup {
 				Template:    `${1}return nil, smarterr.NewError(&retry.NotFoundError{LastError: $2, LastRequest: $3})`,
 			},
 			{
+				Name:        "FmtErrorfNewError",
+				Description: "return ..., fmt.Errorf(...) -> return ..., smarterr.NewError(fmt.Errorf(...))",
+				Regex:       regexp.MustCompile(`(\s+)return (.+), (fmt\.Errorf\([^)]+\))`),
+				Template:    `${1}return $2, smarterr.NewError($3)`,
+			},
+			{
 				Name:        "FmtErrorf",
 				Description: "return fmt.Errorf(..., err) -> return smarterr.NewError(err)",
 				Regex:       regexp.MustCompile(`(\s+)return fmt\.Errorf\(.*,\s*([^)]+)\)`),
@@ -70,6 +77,29 @@ func CreateBareErrorPatterns() PatternGroup {
 				Regex:       regexp.MustCompile(`(?mi)(\s+return .+, )(fmt\.Errorf\("[^"]*unexpected format[^"]*".*?\))$`),
 				Template:    `${1}smarterr.NewError($2)`,
 			},
+			{
+				Name:        "DiagsAddError",
+				Description: "Convert diags.AddError patterns to smarterr.NewError returns",
+				Replace:     replaceDiagsAddError,
+			},
 		},
 	}
+}
+
+// replaceDiagsAddError converts helper functions that use diags.AddError to return smarterr.NewError
+func replaceDiagsAddError(content string) string {
+	// Add missing var diags diag.Diagnostics declarations for functions that use diags but don't declare it
+	funcPattern := regexp.MustCompile(`(?s)(func\s+[^{]*\([^)]*\)\s*\([^,)]+,\s*diag\.Diagnostics\s*\)\s*\{\s*)(\s*switch|\s*case|\s*[a-zA-Z])`)
+	content = funcPattern.ReplaceAllStringFunc(content, func(match string) string {
+		// Check if diags is used but not declared
+		if strings.Contains(match, "diags") && !strings.Contains(match, "var diags") {
+			submatches := funcPattern.FindStringSubmatch(match)
+			if len(submatches) >= 3 {
+				return submatches[1] + "var diags diag.Diagnostics\n\t" + submatches[2]
+			}
+		}
+		return match
+	})
+
+	return content
 }
