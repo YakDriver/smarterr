@@ -126,8 +126,17 @@ func AddEnrich(ctx context.Context, existing *fwdiag.Diagnostics, incoming fwdia
 			Debugf("[AddEnrich %s] rendered %s: %q", callID, DiagnosticDetailKey, d)
 			detail = d
 		}
-		// Create enriched diagnostic
-		enriched := fwdiag.NewErrorDiagnostic(summary, detail)
+		// Create enriched diagnostic preserving original severity
+		var enriched fwdiag.Diagnostic
+		switch diag.Severity().String() {
+		case SeverityWarning:
+			enriched = fwdiag.NewWarningDiagnostic(summary, detail)
+		case SeverityError:
+			enriched = fwdiag.NewErrorDiagnostic(summary, detail)
+		default:
+			// Fallback to error for unknown severities
+			enriched = fwdiag.NewErrorDiagnostic(summary, detail)
+		}
 		// Deduplicate after enrichment
 		if existing.Contains(enriched) {
 			continue
@@ -254,21 +263,80 @@ func AppendOne(ctx context.Context, existing sdkdiag.Diagnostics, incoming sdkdi
 
 // AppendEnrich appends incoming SDK diagnostics to existing SDK diagnostics with enrichment
 func AppendEnrich(ctx context.Context, existing sdkdiag.Diagnostics, incoming sdkdiag.Diagnostics, keyvals ...any) sdkdiag.Diagnostics {
+	ctx, callID := globalCallID(ctx)
+	Debugf("[AppendEnrich %s] called with len(incoming): %d, keyvals: %v", callID, len(incoming), keyvals)
+
 	// If incoming is empty, return existing as-is
 	if len(incoming) == 0 {
 		return existing
 	}
 
+	defer func() {
+		if r := recover(); r != nil {
+			Debugf("[AppendEnrich %s] Panic recovered: %v", callID, r)
+			existing = append(existing, incoming...)
+		}
+	}()
+
+	if wrappedFS == nil {
+		Debugf("[AppendEnrich %s] No wrappedFS set; cannot enrich diagnostics", callID)
+		return append(existing, incoming...)
+	}
+
+	relStackPaths := collectRelStackPaths(ctx, wrappedBaseDir)
+	cfg, cfgErr := internal.LoadConfig(ctx, wrappedFS, relStackPaths, wrappedBaseDir)
+	if cfgErr != nil {
+		Debugf("[AppendEnrich %s] Config load error: %v", callID, cfgErr)
+		return append(existing, incoming...)
+	}
+
 	// For each diagnostic in incoming, enrich it and append to existing
 	for _, diag := range incoming {
-		// Convert the diagnostic to an error-like structure for enrichment
+		Debugf("[AppendEnrich %s] enriching diagnostic: %+v", callID, diag)
+
+		// Create a fake error for enrichment context
 		var err error
 		if diag.Summary != "" || diag.Detail != "" {
 			err = fmt.Errorf("%s: %s", diag.Summary, diag.Detail)
 		}
 
-		// Use existing Append logic to enrich and add
-		existing = Append(ctx, existing, err, keyvals...)
+		// Build runtime with diagnostic context
+		rt := internal.NewRuntime(ctx, cfg, err, keyvals...)
+		values := rt.BuildTokenValueMap(ctx)
+
+		// Render summary/detail using error templates if present, else fallback to original
+		summary, detail := diag.Summary, diag.Detail
+		if s, renderErr := cfg.RenderTemplate(ctx, ErrorSummaryKey, values); renderErr == nil && s != "" {
+			Debugf("[AppendEnrich %s] rendered %s: %q", callID, ErrorSummaryKey, s)
+			summary = s
+		}
+		if d, renderErr := cfg.RenderTemplate(ctx, ErrorDetailKey, values); renderErr == nil && d != "" {
+			Debugf("[AppendEnrich %s] rendered %s: %q", callID, ErrorDetailKey, d)
+			detail = d
+		}
+
+		// Create enriched diagnostic preserving original severity
+		enriched := sdkdiag.Diagnostic{
+			Severity: diag.Severity,
+			Summary:  summary,
+			Detail:   detail,
+		}
+
+		existing = append(existing, enriched)
+
+		// Emit log for this diagnostic's severity
+		severityStr := ""
+		switch diag.Severity {
+		case sdkdiag.Error:
+			severityStr = SeverityError
+		case sdkdiag.Warning:
+			severityStr = SeverityWarning
+		default:
+			severityStr = SeverityError
+		}
+		if severityStr == SeverityError || severityStr == SeverityWarning || severityStr == SeverityInfo {
+			emitLogTemplates(ctx, cfg, values, severityStr)
+		}
 	}
 
 	return existing
