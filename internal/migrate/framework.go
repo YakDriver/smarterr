@@ -33,6 +33,11 @@ func CreateFrameworkPatterns() PatternGroup {
 				Template:    `${1}smerr.AddError(ctx, &response.Diagnostics, $3)`,
 			},
 			{
+				Name:        "AddErrorFmtSprintf",
+				Description: "response.Diagnostics.AddError(..., fmt.Sprintf(...)) -> smerr.AddError(..., fmt.Errorf(...))",
+				Replace:     replaceAddErrorFmtSprintf,
+			},
+			{
 				Name:        "CreateProblemStandardMessage",
 				Description: "response.Diagnostics.AddError with create.ProblemStandardMessage",
 				Replace:     replaceCreateProblemStandardMessage,
@@ -49,18 +54,19 @@ func replaceDeprecatedEnrichAppend(content string) string {
 
 // replaceVariadicAppend handles response.Diagnostics.Append with ... variadic operator
 func replaceVariadicAppend(content string) string {
-	re := regexp.MustCompile(`(?m)(\s+)response\.Diagnostics\.Append\((.+)\.\.\.\)$`)
+	re := regexp.MustCompile(`(?m)(\s+)(resp|response)\.Diagnostics\.Append\((.+)\.\.\.\)$`)
 	return re.ReplaceAllStringFunc(content, func(match string) string {
 		// Extract the parts
 		submatches := re.FindStringSubmatch(match)
-		if len(submatches) != 3 {
+		if len(submatches) != 4 {
 			return match
 		}
 		indent := submatches[1]
-		arg := submatches[2]
+		respVar := submatches[2]
+		arg := submatches[3]
 
 		// Replace with smerr.AddEnrich (updated from deprecated EnrichAppend)
-		return indent + "smerr.AddEnrich(ctx, &response.Diagnostics, " + arg + ")"
+		return indent + "smerr.AddEnrich(ctx, &" + respVar + ".Diagnostics, " + arg + ")"
 	})
 }
 
@@ -97,4 +103,28 @@ func replaceCreateProblemStandardMessage(content string) string {
 	content = re2.ReplaceAllString(content, `${1}smerr.AddError(ctx, &response.Diagnostics, $2)`)
 
 	return content
+}
+
+// replaceAddErrorFmtSprintf handles response.Diagnostics.AddError with fmt.Sprintf patterns
+func replaceAddErrorFmtSprintf(content string) string {
+	// Handle multiline response.Diagnostics.AddError calls
+	re := regexp.MustCompile(`(?s)(\s+)(resp|response)\.Diagnostics\.AddError\(\s*"[^"]*",\s*(fmt\.Sprintf\([^)]*(?:\([^)]*\)[^)]*)*\)|"[^"]*")\s*,?\s*\)`)
+	return re.ReplaceAllStringFunc(content, func(match string) string {
+		submatches := re.FindStringSubmatch(match)
+		if len(submatches) != 4 {
+			return match
+		}
+		indent := submatches[1]
+		respVar := submatches[2]
+		errorArg := submatches[3]
+		
+		// Convert fmt.Sprintf to fmt.Errorf, or wrap string literals in fmt.Errorf
+		if strings.HasPrefix(errorArg, "fmt.Sprintf") {
+			errorArg = strings.Replace(errorArg, "fmt.Sprintf", "fmt.Errorf", 1)
+		} else if strings.HasPrefix(errorArg, `"`) {
+			errorArg = "fmt.Errorf(" + errorArg + ")"
+		}
+		
+		return indent + "smerr.AddError(ctx, &" + respVar + ".Diagnostics, " + errorArg + ")"
+	})
 }
