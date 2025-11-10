@@ -274,28 +274,20 @@ func AppendEnrich(ctx context.Context, existing sdkdiag.Diagnostics, incoming sd
 	defer func() {
 		if r := recover(); r != nil {
 			Debugf("[AppendEnrich %s] Panic recovered: %v", callID, r)
-			for _, diag := range incoming {
-				existing = append(existing, diag)
-			}
+			existing = append(existing, incoming...)
 		}
 	}()
 
 	if wrappedFS == nil {
 		Debugf("[AppendEnrich %s] No wrappedFS set; cannot enrich diagnostics", callID)
-		for _, diag := range incoming {
-			existing = append(existing, diag)
-		}
-		return existing
+		return append(existing, incoming...)
 	}
 
 	relStackPaths := collectRelStackPaths(ctx, wrappedBaseDir)
 	cfg, cfgErr := internal.LoadConfig(ctx, wrappedFS, relStackPaths, wrappedBaseDir)
 	if cfgErr != nil {
 		Debugf("[AppendEnrich %s] Config load error: %v", callID, cfgErr)
-		for _, diag := range incoming {
-			existing = append(existing, diag)
-		}
-		return existing
+		return append(existing, incoming...)
 	}
 
 	// For each diagnostic in incoming, enrich it and append to existing
