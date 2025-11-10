@@ -148,22 +148,6 @@ func (im *ImportManager) hasImportWithAlias(path, alias string) bool {
 	return false
 }
 
-// removeImport removes an import from the content
-func (im *ImportManager) removeImport(content, path string) string {
-	// Simple regex-based removal for now
-	patterns := []string{
-		`\s*"` + regexp.QuoteMeta(path) + `"\s*\n`,
-		`\s*"` + regexp.QuoteMeta(path) + `"`,
-	}
-
-	for _, pattern := range patterns {
-		re := regexp.MustCompile(pattern)
-		content = re.ReplaceAllString(content, "")
-	}
-
-	return content
-}
-
 // addImport adds a single import to the content using the same logic as the original
 func (im *ImportManager) addImport(content string, spec ImportSpec) string {
 	// Check if import already exists to prevent duplicates
