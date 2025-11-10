@@ -10,7 +10,7 @@ import (
 
 func TestAddOne_PreservesDiagnosticSeverity(t *testing.T) {
 	ctx := context.Background()
-	
+
 	tests := []struct {
 		name     string
 		input    fwdiag.Diagnostic
@@ -22,7 +22,7 @@ func TestAddOne_PreservesDiagnosticSeverity(t *testing.T) {
 			expected: SeverityWarning,
 		},
 		{
-			name:     "error diagnostic preserved", 
+			name:     "error diagnostic preserved",
 			input:    fwdiag.NewErrorDiagnostic("test error", "error detail"),
 			expected: SeverityError,
 		},
@@ -31,13 +31,13 @@ func TestAddOne_PreservesDiagnosticSeverity(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var existing fwdiag.Diagnostics
-			
+
 			AddOne(ctx, &existing, tt.input)
-			
+
 			if len(existing) != 1 {
 				t.Fatalf("expected 1 diagnostic, got %d", len(existing))
 			}
-			
+
 			actualSeverity := existing[0].Severity().String()
 			if actualSeverity != tt.expected {
 				t.Errorf("expected severity %s, got %s", tt.expected, actualSeverity)
@@ -48,7 +48,7 @@ func TestAddOne_PreservesDiagnosticSeverity(t *testing.T) {
 
 func TestAddEnrich_PreservesDiagnosticSeverity(t *testing.T) {
 	ctx := context.Background()
-	
+
 	tests := []struct {
 		name     string
 		input    fwdiag.Diagnostics
@@ -60,7 +60,7 @@ func TestAddEnrich_PreservesDiagnosticSeverity(t *testing.T) {
 			expected: SeverityWarning,
 		},
 		{
-			name:     "error diagnostic preserved", 
+			name:     "error diagnostic preserved",
 			input:    fwdiag.Diagnostics{fwdiag.NewErrorDiagnostic("test error", "error detail")},
 			expected: SeverityError,
 		},
@@ -69,13 +69,13 @@ func TestAddEnrich_PreservesDiagnosticSeverity(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var existing fwdiag.Diagnostics
-			
+
 			AddEnrich(ctx, &existing, tt.input)
-			
+
 			if len(existing) != 1 {
 				t.Fatalf("expected 1 diagnostic, got %d", len(existing))
 			}
-			
+
 			actualSeverity := existing[0].Severity().String()
 			if actualSeverity != tt.expected {
 				t.Errorf("expected severity %s, got %s", tt.expected, actualSeverity)
@@ -86,7 +86,7 @@ func TestAddEnrich_PreservesDiagnosticSeverity(t *testing.T) {
 
 func TestAppendOne_PreservesSDKDiagnosticSeverity(t *testing.T) {
 	ctx := context.Background()
-	
+
 	tests := []struct {
 		name     string
 		input    sdkdiag.Diagnostic
@@ -105,7 +105,7 @@ func TestAppendOne_PreservesSDKDiagnosticSeverity(t *testing.T) {
 			name: "error diagnostic preserved",
 			input: sdkdiag.Diagnostic{
 				Severity: sdkdiag.Error,
-				Summary:  "test error", 
+				Summary:  "test error",
 				Detail:   "error detail",
 			},
 			expected: sdkdiag.Error,
@@ -115,13 +115,13 @@ func TestAppendOne_PreservesSDKDiagnosticSeverity(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var existing sdkdiag.Diagnostics
-			
+
 			result := AppendOne(ctx, existing, tt.input)
-			
+
 			if len(result) != 1 {
 				t.Fatalf("expected 1 diagnostic, got %d", len(result))
 			}
-			
+
 			if result[0].Severity != tt.expected {
 				t.Errorf("expected severity %v, got %v", tt.expected, result[0].Severity)
 			}
@@ -131,7 +131,7 @@ func TestAppendOne_PreservesSDKDiagnosticSeverity(t *testing.T) {
 
 func TestAppendEnrich_PreservesSDKDiagnosticSeverity(t *testing.T) {
 	ctx := context.Background()
-	
+
 	tests := []struct {
 		name     string
 		input    sdkdiag.Diagnostics
@@ -160,13 +160,13 @@ func TestAppendEnrich_PreservesSDKDiagnosticSeverity(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var existing sdkdiag.Diagnostics
-			
+
 			result := AppendEnrich(ctx, existing, tt.input)
-			
+
 			if len(result) != 1 {
 				t.Fatalf("expected 1 diagnostic, got %d", len(result))
 			}
-			
+
 			if result[0].Severity != tt.expected {
 				t.Errorf("expected severity %v, got %v", tt.expected, result[0].Severity)
 			}
