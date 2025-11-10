@@ -117,14 +117,14 @@ func replaceAddErrorFmtSprintf(content string) string {
 		indent := submatches[1]
 		respVar := submatches[2]
 		errorArg := submatches[3]
-		
+
 		// Convert fmt.Sprintf to fmt.Errorf, or wrap string literals in fmt.Errorf
 		if strings.HasPrefix(errorArg, "fmt.Sprintf") {
 			errorArg = strings.Replace(errorArg, "fmt.Sprintf", "fmt.Errorf", 1)
 		} else if strings.HasPrefix(errorArg, `"`) {
 			errorArg = "fmt.Errorf(" + errorArg + ")"
 		}
-		
+
 		return indent + "smerr.AddError(ctx, &" + respVar + ".Diagnostics, " + errorArg + ")"
 	})
 }

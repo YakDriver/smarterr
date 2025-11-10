@@ -155,12 +155,12 @@ func (im *ImportManager) removeImport(content, path string) string {
 		`\s*"` + regexp.QuoteMeta(path) + `"\s*\n`,
 		`\s*"` + regexp.QuoteMeta(path) + `"`,
 	}
-	
+
 	for _, pattern := range patterns {
 		re := regexp.MustCompile(pattern)
 		content = re.ReplaceAllString(content, "")
 	}
-	
+
 	return content
 }
 

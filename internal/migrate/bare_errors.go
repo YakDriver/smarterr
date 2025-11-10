@@ -100,6 +100,6 @@ func replaceDiagsAddError(content string) string {
 		}
 		return match
 	})
-	
+
 	return content
 }
