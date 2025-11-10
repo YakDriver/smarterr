@@ -18,7 +18,7 @@ jobs:
         run: npx markdownlint-cli '**/*.md'
 
       - name: Spell check
-        uses: rojopolis/spellcheck-github-actions@0.53.0
+        uses: rojopolis/spellcheck-github-actions@0.54.0
 
       - name: Vale prose linter
         uses: errata-ai/vale-action@v2
