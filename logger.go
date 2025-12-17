@@ -11,6 +11,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 
 	tflog "github.com/hashicorp/terraform-plugin-log/tflog"
 )
