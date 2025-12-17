@@ -11,6 +11,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 
 	tflog "github.com/hashicorp/terraform-plugin-log/tflog"
 )
@@ -52,10 +53,11 @@ func (l StdLogger) Error(ctx context.Context, msg string, keyvals map[string]any
 func logPrint(level, msg string, keyvals map[string]any) {
 	logMsg := level + ": " + msg
 	if len(keyvals) > 0 {
-		logMsg += " | "
+		var parts []string
 		for k, v := range keyvals {
-			logMsg += k + "=" + fmt.Sprint(v) + " "
+			parts = append(parts, k+"="+fmt.Sprint(v))
 		}
+		logMsg += " | " + strings.Join(parts, " ")
 	}
 	// DO NOT use this for internal smarterr debug logs! This is strictly for user-facing logs.
 	log.Println(logMsg)

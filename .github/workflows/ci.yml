@@ -41,9 +41,6 @@ jobs:
             exit 1
           fi
 
-      - name: Modern Go code check
-        run: make modern-check
-
       - name: Build
         run: go build ./...
 
@@ -102,3 +99,6 @@ jobs:
 
       - name: Vulnerability check
         run: make vulncheck
+
+      - name: Modern Go code check
+        run: make modern-check
