@@ -145,18 +145,16 @@ func applyStripSuffix(value string, step TransformStep) string {
 	}
 	if step.Recurse != nil && *step.Recurse {
 		for {
-			if strings.HasSuffix(value, *step.Value) {
-				value = strings.TrimSuffix(value, *step.Value)
-				value = strings.TrimSpace(value)
+			if trimmed, found := strings.CutSuffix(value, *step.Value); found {
+				value = strings.TrimSpace(trimmed)
 				continue
 			}
 			break
 		}
 		return value
 	}
-	if strings.HasSuffix(value, *step.Value) {
-		value = strings.TrimSuffix(value, *step.Value)
-		value = strings.TrimSpace(value)
+	if trimmed, found := strings.CutSuffix(value, *step.Value); found {
+		value = strings.TrimSpace(trimmed)
 	}
 	return value
 }
