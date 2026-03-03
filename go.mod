@@ -1,6 +1,6 @@
 module github.com/YakDriver/smarterr
 
-go 1.24.2
+go 1.25
 
 require (
 	github.com/hashicorp/hcl/v2 v2.24.0
@@ -8,7 +8,7 @@ require (
 	github.com/hashicorp/terraform-plugin-log v0.10.0
 	github.com/hashicorp/terraform-plugin-sdk/v2 v2.39.0
 	github.com/spf13/cobra v1.10.2
-	github.com/zclconf/go-cty v1.17.0
+	github.com/zclconf/go-cty v1.18.0
 )
 
 require (
