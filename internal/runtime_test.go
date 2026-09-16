@@ -11,9 +11,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 )
 
-//go:fix inline
-func strPtr(s string) *string { return new(s) }
-
 func TestParseKeyvals(t *testing.T) {
 	tests := []struct {
 		name  string
