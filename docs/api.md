@@ -130,6 +130,10 @@ func Errorf(format string, args ...any) error
 
 Formats a new error (like `fmt.Errorf`) and captures the call stack and message. Use this for new errors.
 
+Because it delegates to `fmt.Errorf`, the `%w` verb is supported: the wrapped
+error chain is preserved and remains traversable with `errors.Is`,
+`errors.As`, and `errors.Unwrap`.
+
 #### Errorf example usage
 
 ```go
@@ -138,6 +142,9 @@ if err != nil {
 }
 
 return smarterr.Errorf("unexpected result for alarm %q", name)
+
+// Wrap an existing error while adding context; errors.Is/As still work:
+return smarterr.Errorf("creating alarm %q: %w", name, err)
 ```
 
 You can pass the resulting error directly to `smarterr.Append` or `smarterr.AddError` for Config-driven formatting and diagnostics. smarterr uses the captured stack for advanced stack matching and template tokens.
