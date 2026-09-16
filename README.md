@@ -289,6 +289,7 @@ This enables context-rich diagnostics for both errors and framework-generated is
 - [Full Config Schema](docs/schema.md)
 - [Layered configs & Merging](docs/layering.md)
 - [Diagnostics & Fallbacks](docs/diagnostics.md)
+- [List resources (yield)](docs/list-resources.md)
 - [API Reference](docs/api.md)
 - [FAQ](#faq)
 

@@ -48,6 +48,8 @@ Start with these docs:
   - How smarterr discovers, merges, and applies configs across directories
 - [**Diagnostics & Fallbacks**](diagnostics.md):
   - How smarterr handles missing/broken Config to protect errors
+- [**List resources**](list-resources.md):
+  - Enriching yield-based errors in Terraform Plugin Framework list resources
 
 ## Example use cases
 
