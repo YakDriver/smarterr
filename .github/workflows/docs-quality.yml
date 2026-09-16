@@ -21,6 +21,6 @@ jobs:
         uses: rojopolis/spellcheck-github-actions@0.63.0
 
       - name: Vale prose linter
-        uses: errata-ai/vale-action@v2
+        uses: errata-ai/vale-action@v3
         with:
           fail_on_error: true
