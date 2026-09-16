@@ -8,6 +8,12 @@ matrix:
     - '.github/workflows/.wordlist.txt'
   pipeline:
   - pyspelling.filters.markdown:
+      markdown_extensions:
+      # Convert ``` fenced code blocks to <pre><code> so the html filter below
+      # can ignore them. Without this, python-markdown leaves fenced code as
+      # plain <p> text and aspell "checks" code identifiers (see the many code
+      # names historically added to .wordlist.txt).
+      - markdown.extensions.fenced_code:
   - pyspelling.filters.html:
       comments: false
       ignores:
