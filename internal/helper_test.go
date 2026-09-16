@@ -1,5 +1,6 @@
 package internal
 
+//go:fix inline
 func stringPtr(s string) *string {
-	return &s
+	return new(s)
 }

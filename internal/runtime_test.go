@@ -11,7 +11,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 )
 
-func strPtr(s string) *string { return &s }
+//go:fix inline
+func strPtr(s string) *string { return new(s) }
 
 func TestParseKeyvals(t *testing.T) {
 	tests := []struct {
@@ -75,28 +76,28 @@ func TestTokenResolve_BasicSources(t *testing.T) {
 	}{
 		{
 			name:    "parameter found",
-			token:   Token{Source: "parameter", Parameter: stringPtr("foo")},
+			token:   Token{Source: "parameter", Parameter: new("foo")},
 			ctx:     context.Background(),
 			runtime: NewRuntime(context.Background(), &Config{Parameters: []Parameter{{Name: "foo", Value: "bar"}}}, nil, nil),
 			want:    "bar",
 		},
 		{
 			name:    "parameter not found",
-			token:   Token{Source: "parameter", Parameter: stringPtr("baz")},
+			token:   Token{Source: "parameter", Parameter: new("baz")},
 			ctx:     context.Background(),
 			runtime: NewRuntime(context.Background(), &Config{Parameters: []Parameter{{Name: "foo", Value: "bar"}}}, nil, nil),
 			want:    "",
 		},
 		{
 			name:    "context found",
-			token:   Token{Source: "context", Context: stringPtr("key")},
+			token:   Token{Source: "context", Context: new("key")},
 			ctx:     context.WithValue(context.Background(), ContextKey("key"), "val"),
 			runtime: NewRuntime(context.Background(), &Config{}, nil, nil),
 			want:    "val",
 		},
 		{
 			name:    "context not found",
-			token:   Token{Source: "context", Context: stringPtr("missing")},
+			token:   Token{Source: "context", Context: new("missing")},
 			ctx:     context.WithValue(context.Background(), ContextKey("key"), "val"),
 			runtime: NewRuntime(context.Background(), &Config{}, nil, nil),
 			want:    "",
@@ -117,14 +118,14 @@ func TestTokenResolve_BasicSources(t *testing.T) {
 		},
 		{
 			name:    "arg found",
-			token:   Token{Source: "arg", Arg: stringPtr("foo")},
+			token:   Token{Source: "arg", Arg: new("foo")},
 			ctx:     context.Background(),
 			runtime: NewRuntime(context.Background(), &Config{}, nil, "foo", "bar"),
 			want:    "bar",
 		},
 		{
 			name:    "arg not found",
-			token:   Token{Source: "arg", Arg: stringPtr("baz")},
+			token:   Token{Source: "arg", Arg: new("baz")},
 			ctx:     context.Background(),
 			runtime: NewRuntime(context.Background(), &Config{}, nil, "foo", "bar"),
 			want:    "",
@@ -154,13 +155,13 @@ func TestRuntime_BuildTokenValueMap(t *testing.T) {
 	cfg := &Config{
 		Parameters: []Parameter{{Name: "param1", Value: "val1"}},
 		Tokens: []Token{
-			{Name: "param_token", Source: "parameter", Parameter: stringPtr("param1")},
-			{Name: "ctx_token", Source: "context", Context: stringPtr("ctxKey")},
+			{Name: "param_token", Source: "parameter", Parameter: new("param1")},
+			{Name: "ctx_token", Source: "context", Context: new("ctxKey")},
 			{Name: "error_token", Source: "error"},
-			{Name: "arg_token", Source: "arg", Arg: stringPtr("foo")},
-			{Name: "missing_param", Source: "parameter", Parameter: stringPtr("notfound")},
-			{Name: "missing_ctx", Source: "context", Context: stringPtr("notfound")},
-			{Name: "missing_arg", Source: "arg", Arg: stringPtr("notfound")},
+			{Name: "arg_token", Source: "arg", Arg: new("foo")},
+			{Name: "missing_param", Source: "parameter", Parameter: new("notfound")},
+			{Name: "missing_ctx", Source: "context", Context: new("notfound")},
+			{Name: "missing_arg", Source: "arg", Arg: new("notfound")},
 		},
 	}
 	err := fmt.Errorf("errVal")
@@ -207,7 +208,7 @@ func TestTokenResolve_WithTransforms(t *testing.T) {
 	token := Token{
 		Name:       "t",
 		Source:     "parameter",
-		Parameter:  stringPtr("p"),
+		Parameter:  new("p"),
 		Transforms: []string{stripPrefix, fixSpace, toLower},
 	}
 	rt := NewRuntime(context.Background(), cfg, nil, nil)
@@ -249,7 +250,7 @@ func TestConfig_RenderTemplate_BasicAndFallback(t *testing.T) {
 			Name:   "hello",
 			Format: "Hello, {{.name}}! Your id is {{.id}}.",
 		}},
-		Smarterr: &Smarterr{TokenErrorMode: strPtr("placeholder")},
+		Smarterr: &Smarterr{TokenErrorMode: new("placeholder")},
 	}
 	values := map[string]any{"name": "Alice"} // id is missing
 	out, err := cfg.RenderTemplate(context.Background(), "hello", values)
