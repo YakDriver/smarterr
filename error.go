@@ -1,7 +1,6 @@
 package smarterr
 
 import (
-	"errors"
 	"fmt"
 	"runtime"
 )
@@ -65,11 +64,14 @@ func NewError(err error) error {
 //
 //	return smarterr.Errorf("unexpected result for alarm %q", name)
 func Errorf(format string, args ...any) error {
-	msg := fmt.Sprintf(format, args...)
+	// Use fmt.Errorf (not errors.New(fmt.Sprintf(...))) so the %w verb is
+	// honored and the wrapped error chain stays traversable via
+	// errors.Is/errors.As/errors.Unwrap. See issue #63.
+	err := fmt.Errorf(format, args...)
 	stack := captureStack(3) // skip 3 to get the caller of Errorf
 	return &Error{
-		Err:           errors.New(msg),
-		Message:       msg,
+		Err:           err,
+		Message:       err.Error(),
 		Annotations:   map[string]string{},
 		CapturedStack: stack,
 	}

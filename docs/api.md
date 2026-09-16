@@ -63,7 +63,7 @@ func init() {
 **go:embed tips:**
 
 - You can use several `//go:embed` lines to include files or patterns.
-- `go:embed` **doesn't** recursively embed subdirectories; you must add a pattern for each depth you want (for example, `service/*/smarterr.hcl`, `service/*/*/smarterr.hcl`).
+- `go:embed` **doesn't** recursively embed subdirectories. Add a pattern for each depth you want (for example, `service/*/smarterr.hcl`, `service/*/*/smarterr.hcl`).
 - Go resolves embedded files at compile time and includes them in the binary. **Config changes don't require code changes, but do require a new build.**
 
 ### Real filesystem example
@@ -130,14 +130,36 @@ func Errorf(format string, args ...any) error
 
 Formats a new error (like `fmt.Errorf`) and captures the call stack and message. Use this for new errors.
 
+Because it delegates to `fmt.Errorf`, the `%w` verb works as expected:
+`errors.Is` and `errors.As` traverse the wrapped chain, including errors built
+with several `%w` verbs. `errors.Unwrap` returns the next error in a
+single-`%w` chain. As with `fmt.Errorf`, it returns `nil` for an error built
+from several `%w` verbs, which expose `Unwrap() []error` instead of
+`Unwrap() error`.
+
 #### Errorf example usage
+
+Create a new error with a formatted message:
+
+```go
+return smarterr.Errorf("unexpected result for alarm %q", name)
+```
+
+Wrap an existing error while adding context. `errors.Is` and `errors.As`
+continue to match the wrapped error:
+
+```go
+if err != nil {
+    return smarterr.Errorf("creating alarm %q: %w", name, err)
+}
+```
+
+To wrap an error without adding a message, use `NewError`:
 
 ```go
 if err != nil {
     return smarterr.NewError(err)
 }
-
-return smarterr.Errorf("unexpected result for alarm %q", name)
 ```
 
 You can pass the resulting error directly to `smarterr.Append` or `smarterr.AddError` for Config-driven formatting and diagnostics. smarterr uses the captured stack for advanced stack matching and template tokens.
@@ -183,7 +205,7 @@ Enriches a set of framework diagnostics (`incoming`) with smarterr configuration
 
 - **Templates used:** `diagnostic_summary` and `diagnostic_detail` (if defined in Config)
 - smarterr passes through the original diagnostic summary and detail if you don't define the templates.
-- All output produces a diagnostic; the template name refers to the input type (diagnostic).
+- All output produces a diagnostic. The template name refers to the input type (diagnostic).
 
 **Example usage:**
 
