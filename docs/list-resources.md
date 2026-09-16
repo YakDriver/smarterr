@@ -77,6 +77,11 @@ and any anonymous iterator closure defined in it (`...List.func1`). It doesn't
 match the smarterr list helpers, whose names contain "List" but don't end in
 `.List` or `.List.funcN`.
 
+The order of names in `stack_matches` doesn't set precedence. smarterr walks the
+call stack from the innermost frame outward and takes the first frame that
+matches any listed rule, so the nearest operation wins. List order affects the
+outcome when two rules match the same frame.
+
 ### Why this works inside the closure
 
 The list sinks enrich at the moment you call them, while a `List`-named frame
