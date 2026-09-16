@@ -130,9 +130,9 @@ func Errorf(format string, args ...any) error
 
 Formats a new error (like `fmt.Errorf`) and captures the call stack and message. Use this for new errors.
 
-Because it delegates to `fmt.Errorf`, the `%w` verb is supported: the wrapped
-error chain is preserved and remains traversable with `errors.Is`,
-`errors.As`, and `errors.Unwrap`.
+Because it delegates to `fmt.Errorf`, the `%w` verb works as expected: the
+wrapped error chain survives, so `errors.Is`, `errors.As`, and `errors.Unwrap`
+can traverse it.
 
 #### Errorf example usage
 
