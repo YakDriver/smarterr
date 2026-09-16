@@ -130,21 +130,36 @@ func Errorf(format string, args ...any) error
 
 Formats a new error (like `fmt.Errorf`) and captures the call stack and message. Use this for new errors.
 
-Because it delegates to `fmt.Errorf`, the `%w` verb works as expected: the
-wrapped error chain survives, so `errors.Is`, `errors.As`, and `errors.Unwrap`
-can traverse it.
+Because it delegates to `fmt.Errorf`, the `%w` verb works as expected:
+`errors.Is` and `errors.As` traverse the wrapped chain, including errors built
+with several `%w` verbs. `errors.Unwrap` returns the next error in a
+single-`%w` chain. As with `fmt.Errorf`, it returns `nil` for an error built
+from several `%w` verbs, which expose `Unwrap() []error` instead of
+`Unwrap() error`.
 
 #### Errorf example usage
+
+Create a new error with a formatted message:
+
+```go
+return smarterr.Errorf("unexpected result for alarm %q", name)
+```
+
+Wrap an existing error while adding context. `errors.Is` and `errors.As`
+continue to match the wrapped error:
+
+```go
+if err != nil {
+    return smarterr.Errorf("creating alarm %q: %w", name, err)
+}
+```
+
+To wrap an error without adding a message, use `NewError`:
 
 ```go
 if err != nil {
     return smarterr.NewError(err)
 }
-
-return smarterr.Errorf("unexpected result for alarm %q", name)
-
-// Wrap an existing error while adding context; errors.Is/As still work:
-return smarterr.Errorf("creating alarm %q: %w", name, err)
 ```
 
 You can pass the resulting error directly to `smarterr.Append` or `smarterr.AddError` for Config-driven formatting and diagnostics. smarterr uses the captured stack for advanced stack matching and template tokens.
