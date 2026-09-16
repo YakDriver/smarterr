@@ -63,7 +63,7 @@ func init() {
 **go:embed tips:**
 
 - You can use several `//go:embed` lines to include files or patterns.
-- `go:embed` **doesn't** recursively embed subdirectories; you must add a pattern for each depth you want (for example, `service/*/smarterr.hcl`, `service/*/*/smarterr.hcl`).
+- `go:embed` **doesn't** recursively embed subdirectories. Add a pattern for each depth you want (for example, `service/*/smarterr.hcl`, `service/*/*/smarterr.hcl`).
 - Go resolves embedded files at compile time and includes them in the binary. **Config changes don't require code changes, but do require a new build.**
 
 ### Real filesystem example
@@ -190,7 +190,7 @@ Enriches a set of framework diagnostics (`incoming`) with smarterr configuration
 
 - **Templates used:** `diagnostic_summary` and `diagnostic_detail` (if defined in Config)
 - smarterr passes through the original diagnostic summary and detail if you don't define the templates.
-- All output produces a diagnostic; the template name refers to the input type (diagnostic).
+- All output produces a diagnostic. The template name refers to the input type (diagnostic).
 
 **Example usage:**
 
