@@ -8,7 +8,9 @@ declaratively
 EnrichAppend
 Errorf
 FAQ
+goroutine
 NewError
+paginator
 pluggable
 smarterr
 stderr

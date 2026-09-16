@@ -22,6 +22,7 @@ Filesystem
 FS
 func
 github
+goroutine
 hcl
 HCL
 https
@@ -38,6 +39,7 @@ Quickstart
 quickstart
 README
 recurse
+regex
 RequestID
 scalable
 SDK
