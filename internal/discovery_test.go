@@ -205,6 +205,42 @@ func TestLoadConfig_RootParentConfig(t *testing.T) {
 		hasToken(t, cfg, "root")
 		hasToken(t, cfg, "svc")
 	})
+
+	// A token defined in both the global config and a root/parent config must
+	// resolve to the parent's value: precedence is global -> parent -> local, so
+	// the parent overrides the global. This directly guards the sort bug where a
+	// root candidate ("smarterr.hcl", depth 0) sorted before the global
+	// ("smarterr/smarterr.hcl", depth 1), letting the global wrongly override
+	// its parent. (Defining it in a deeper service config too would mask the bug,
+	// since the deepest always wins regardless of global/parent order.)
+	t.Run("parent overrides global", func(t *testing.T) {
+		tokenAndParam := func(value string) []byte {
+			return []byte(`
+token "which" {
+  source = "parameter"
+  parameter = "which"
+}
+parameter "which" {
+  value = "` + value + `"
+}
+`)
+		}
+		fsys := &WrappedFS{FS: fstest.MapFS{
+			"smarterr/smarterr.hcl": &fstest.MapFile{Data: tokenAndParam("global")},
+			"smarterr.hcl":          &fstest.MapFile{Data: tokenAndParam("root")},
+		}}
+		cfg, err := LoadConfig(context.Background(), fsys, []string{"x/y/z/internal/service/amp/resource.go"}, "internal")
+		if err != nil {
+			t.Fatalf("LoadConfig error: %v", err)
+		}
+		if len(cfg.Tokens) != 1 {
+			t.Fatalf("expected token \"which\" merged to a single entry, got %d: %+v", len(cfg.Tokens), cfg.Tokens)
+		}
+		rt := NewRuntime(context.Background(), cfg, nil, nil)
+		if val := cfg.Tokens[0].Resolve(context.Background(), rt); val != "root" {
+			t.Errorf("parent config must override global; expected \"root\", got %q", val)
+		}
+	})
 }
 
 func TestLoadConfig_ExtraConfigNotIncluded(t *testing.T) {

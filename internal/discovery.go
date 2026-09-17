@@ -47,8 +47,9 @@ func collectConfigsForStack(ctx context.Context, fsys FileSystem, relStackPaths 
 	Debugf("[collectConfigsForStack %s] called with baseDir=%q relStackPaths=%v", callID, baseDir, relStackPaths)
 	// Find all config files in
 	type configWithPath struct {
-		cfg  *Config
-		path string
+		cfg    *Config
+		path   string
+		global bool
 	}
 	var cfgsWithPaths []configWithPath
 	globalConfigPath, candidateConfigs, err := findAllConfigPaths(ctx, fsys)
@@ -62,7 +63,7 @@ func collectConfigsForStack(ctx context.Context, fsys FileSystem, relStackPaths 
 		if err != nil {
 			return nil, fmt.Errorf("error loading global config: %w", err)
 		}
-		cfgsWithPaths = append(cfgsWithPaths, configWithPath{cfg, globalConfigPath})
+		cfgsWithPaths = append(cfgsWithPaths, configWithPath{cfg, globalConfigPath, true})
 	}
 
 	// io/fs paths (config paths and the embedded FS) always use "/", and frame
@@ -107,16 +108,25 @@ func collectConfigsForStack(ctx context.Context, fsys FileSystem, relStackPaths 
 					Debugf("[collectConfigsForStack %s] error loading config %s: %v", callID, configPath, err)
 					return nil, fmt.Errorf("error loading config %s: %w", configPath, err)
 				}
-				cfgsWithPaths = append(cfgsWithPaths, configWithPath{cfg, configPath})
+				cfgsWithPaths = append(cfgsWithPaths, configWithPath{cfg, configPath, false})
 				Debugf("[collectConfigsForStack %s] matched config %q for stack path %q", callID, configPath, stackPath)
 				break // Only need to match once per config
 			}
 			Debugf("[collectConfigsForStack %s] config %q did not match, stackPath (%s) does not contain needle (%s)", callID, configPath, stackPath, needle)
 		}
 	}
-	// Sort by path depth (least specific first, most specific last)
-	sort.Slice(cfgsWithPaths, func(i, j int) bool {
-		return strings.Count(cfgsWithPaths[i].path, sep) < strings.Count(cfgsWithPaths[j].path, sep)
+	// Sort least specific first, most specific last, so mergeConfigs applies
+	// global -> parent -> local (later entries override earlier). The designated
+	// global config is "more global than a parent" per the layering model, so it
+	// always sorts first even though a root candidate ("smarterr.hcl", depth 0)
+	// is shallower than "smarterr/smarterr.hcl" (depth 1). SliceStable keeps a
+	// deterministic order among equal-depth candidates.
+	sort.SliceStable(cfgsWithPaths, func(i, j int) bool {
+		a, b := cfgsWithPaths[i], cfgsWithPaths[j]
+		if a.global != b.global {
+			return a.global // global config sorts before everything else
+		}
+		return strings.Count(a.path, sep) < strings.Count(b.path, sep)
 	})
 	var configs []*Config
 	for _, c := range cfgsWithPaths {
