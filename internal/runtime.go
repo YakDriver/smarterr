@@ -283,13 +283,18 @@ func (t *Token) Resolve(ctx context.Context, rt *Runtime) any {
 			Debugf("[Token.Resolve %s] Fallback for token %q: token.Parameter is nil", callID, t.Name)
 			value = fallbackMessage(rt.Config, t.Name, "token.Parameter is nil")
 		} else {
+			var found bool
 			for _, p := range rt.Config.Parameters {
 				if p.Name == *t.Parameter {
 					value = p.Value
+					found = true
 					break
 				}
 			}
-			if value == "" {
+			// Distinguish "not found" from "found but empty": testing value ==
+			// "" would misreport a parameter that's legitimately set to "" as
+			// missing (visible under token_error_mode "detailed"/"placeholder").
+			if !found {
 				Debugf("[Token.Resolve %s] Fallback for token %q: parameter not found in config", callID, t.Name)
 				value = fallbackMessage(rt.Config, t.Name, "parameter not found in config")
 			}

@@ -444,3 +444,27 @@ func TestTokenResolve_DiagnosticSource(t *testing.T) {
 		t.Errorf("severity should be unchanged: got %q, want %q", diagMap["severity"], "Error")
 	}
 }
+
+// TestTokenResolve_ParameterEmptyVsMissing verifies a parameter that is present
+// but set to "" resolves to "" (its configured value), while a genuinely absent
+// parameter reports the not-found fallback. Testing value == "" for "not found"
+// conflated the two; the difference is observable under a non-default
+// token_error_mode.
+func TestTokenResolve_ParameterEmptyVsMissing(t *testing.T) {
+	cfg := &Config{
+		Parameters: []Parameter{{Name: "present", Value: ""}},
+		Smarterr:   &Smarterr{TokenErrorMode: new("detailed")},
+	}
+	rt := NewRuntime(context.Background(), cfg, nil, nil)
+
+	present := Token{Name: "svc", Source: "parameter", Parameter: new("present")}
+	if got := present.Resolve(context.Background(), rt); got != "" {
+		t.Errorf("found-but-empty parameter: got %q, want %q", got, "")
+	}
+
+	missing := Token{Name: "svc", Source: "parameter", Parameter: new("absent")}
+	want := "[unresolved token: svc] (parameter not found in config)"
+	if got := missing.Resolve(context.Background(), rt); got != want {
+		t.Errorf("missing parameter: got %q, want %q", got, want)
+	}
+}
