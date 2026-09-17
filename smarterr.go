@@ -48,7 +48,17 @@ var glblCallID atomic.Uint64 // atomic counter for tracing
 func SetFS(fs FileSystem, baseDir string) {
 	Debugf("SetFS called with baseDir=%q", baseDir)
 	wrappedFS = fs
-	wrappedBaseDir = baseDir
+	// Normalize to forward slashes so path matching is consistent with io/fs
+	// paths (which always use "/") regardless of host OS.
+	wrappedBaseDir = toSlashPath(baseDir)
+}
+
+// toSlashPath normalizes OS path separators to forward slashes. Unlike
+// filepath.ToSlash (which only rewrites the host's separator, so it's a no-op
+// on non-Windows), this is host-independent: it always converts "\" to "/", so
+// Windows-style runtime frame paths match io/fs config paths on any OS.
+func toSlashPath(s string) string {
+	return strings.ReplaceAll(s, `\`, "/")
 }
 
 // AddEnrich is a plugin Framework helper function that enriches diagnostics with smarterr information.
@@ -477,35 +487,34 @@ func relStackPathsFromFiles(files []string, baseDir string) []string {
 	if baseDir == "" {
 		return nil
 	}
+	// Work entirely in forward slashes: io/fs config paths always use "/", and
+	// runtime frame files may use the host separator (e.g. "\" on Windows).
+	baseDir = toSlashPath(baseDir)
 	var relStackPaths []string
-	// baseDir "." means the embed root is the working directory. Runtime frame
-	// files are normally absolute and won't contain "./", so there's nothing to
-	// anchor on; pass non-empty paths through unchanged and let candidate
-	// matching (which uses the bare configDir in this mode) find them.
-	if baseDir == "." {
-		for _, file := range files {
-			if file != "" {
-				relStackPaths = append(relStackPaths, file)
-			}
-		}
-		return relStackPaths
-	}
 	needle := baseDir + "/"
-	sep := "/" + needle // baseDir as a full path segment, e.g. "/internal/"
+	leading := "/" + needle // baseDir as a full path segment, e.g. "/internal/"
 	for _, file := range files {
 		if file == "" {
 			continue
 		}
-		// Only match baseDir at a path-segment boundary: either the file starts
-		// with "<baseDir>/", or "<baseDir>/" is preceded by a separator. This
-		// keeps frames like ".../notinternal/service/x.go" from masquerading as
-		// frames under the configured root.
+		file = toSlashPath(file)
+		// baseDir "." means the embed root is the working directory. Runtime
+		// frame files are normally absolute and won't contain "./", so there's
+		// nothing to anchor on; pass the path through and let candidate matching
+		// (which uses the bare configDir in this mode) find it.
+		if baseDir == "." {
+			relStackPaths = append(relStackPaths, file)
+			continue
+		}
+		// Otherwise match baseDir only at a path-segment boundary: the file
+		// starts with "<baseDir>/", or "<baseDir>/" is preceded by a separator.
+		// This keeps frames like ".../notinternal/service/x.go" from
+		// masquerading as frames under the configured root.
 		switch {
 		case strings.HasPrefix(file, needle):
 			relStackPaths = append(relStackPaths, file)
-		case strings.Contains(file, sep):
-			idx := strings.Index(file, sep) + 1 // skip the leading separator
-			relStackPaths = append(relStackPaths, file[idx:])
+		case strings.Contains(file, leading):
+			relStackPaths = append(relStackPaths, file[strings.Index(file, leading)+1:])
 		}
 	}
 	return relStackPaths

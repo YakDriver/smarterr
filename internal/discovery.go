@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"path/filepath"
+	"path"
 	"sort"
 	"strings"
 
@@ -65,10 +65,14 @@ func collectConfigsForStack(ctx context.Context, fsys FileSystem, relStackPaths 
 		cfgsWithPaths = append(cfgsWithPaths, configWithPath{cfg, globalConfigPath})
 	}
 
-	sep := string(filepath.Separator)
+	// io/fs paths (config paths and the embedded FS) always use "/", and frame
+	// paths are normalized to "/" upstream, so match on "/" regardless of host
+	// OS. Using filepath.Separator here would break discovery on Windows.
+	const sep = "/"
+	baseDir = strings.ReplaceAll(baseDir, `\`, sep)
 	for _, configPath := range candidateConfigs {
 		Debugf("[collectConfigsForStack %s] checking candidate config %q", callID, configPath)
-		configDir := filepath.Dir(configPath)
+		configDir := path.Dir(configPath)
 		needle := baseDir + sep + configDir
 		if baseDir == "." {
 			needle = configDir
@@ -113,17 +117,17 @@ func collectConfigsForStack(ctx context.Context, fsys FileSystem, relStackPaths 
 func findAllConfigPaths(ctx context.Context, fsys FileSystem) (globalConfig string, candidateConfigs []string, err error) {
 	callID := globalCallID(ctx)
 	Debugf("[findAllConfigPaths %s] scanning filesystem for config files", callID)
-	err = fsys.WalkDir(".", func(path string, d fs.DirEntry, err error) error {
+	err = fsys.WalkDir(".", func(walkPath string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return nil
 		}
-		if !strings.HasSuffix(path, ConfigFileName) {
+		if !strings.HasSuffix(walkPath, ConfigFileName) {
 			return nil
 		}
-		if strings.HasPrefix(path, "smarterr/") {
-			globalConfig = path
+		if strings.HasPrefix(walkPath, "smarterr/") {
+			globalConfig = walkPath
 		} else {
-			candidateConfigs = append(candidateConfigs, path)
+			candidateConfigs = append(candidateConfigs, walkPath)
 		}
 		return nil
 	})

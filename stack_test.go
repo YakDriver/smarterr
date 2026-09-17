@@ -47,6 +47,24 @@ func TestRelStackPathsFromFiles_EmptyBaseDir(t *testing.T) {
 // baseDir "." is a supported mode (embed root == working dir). Frame files are
 // absolute and can't be anchored on "./", so non-empty paths pass through so
 // candidate matching (bare configDir) can still find them.
+// Windows frame paths use backslashes, while io/fs config paths use "/". The
+// extractor must normalize so discovery works on Windows too.
+func TestRelStackPathsFromFiles_WindowsPaths(t *testing.T) {
+	files := []string{
+		`C:\repo\internal\service\amp\anomaly_detector_list.go`,
+		`C:\deps\notinternal\service\amp\x.go`, // substring, not a segment: ignore
+		`internal\service\acm\certificate.go`,  // baseDir at start
+	}
+	got := relStackPathsFromFiles(files, "internal")
+	want := []string{
+		"internal/service/amp/anomaly_detector_list.go",
+		"internal/service/acm/certificate.go",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("relStackPathsFromFiles(windows) = %#v, want %#v", got, want)
+	}
+}
+
 func TestRelStackPathsFromFiles_DotBaseDir(t *testing.T) {
 	files := []string{
 		"/abs/proj/service/amp/anomaly_detector_list.go",
@@ -89,17 +107,15 @@ func TestRelStackPathsFromFiles_SegmentBoundary(t *testing.T) {
 	}
 }
 
-// TestCaptureCallers_NotTruncated proves the capture is not limited to the old
-// fixed depth of 5: a call chain deeper than that must still yield every frame.
-// This is the regression guard for the config-discovery truncation bug.
+// TestCaptureCallers_NotTruncated proves the capture grows past its initial
+// buffer: a call chain deeper than the 64-frame starting size must still yield
+// every frame. This exercises the grow-and-retry branch (and guards against the
+// original 5-frame truncation).
 func TestCaptureCallers_NotTruncated(t *testing.T) {
-	const depth = 12 // deeper than the previous 5-frame cap
+	const depth = 80 // exceeds captureCallers' initial 64-slot buffer
 	n := deepCapture(depth)
-	if n <= 5 {
-		t.Fatalf("captureCallers returned %d frames; expected more than the old cap of 5", n)
-	}
 	if n < depth {
-		t.Errorf("captureCallers returned %d frames; expected at least the %d nested callers", n, depth)
+		t.Errorf("captureCallers returned %d frames; expected at least the %d nested callers (grow-and-retry did not capture the full stack)", n, depth)
 	}
 }
 
