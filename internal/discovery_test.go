@@ -165,6 +165,48 @@ func TestLoadConfig_LeftBoundary(t *testing.T) {
 	}
 }
 
+// TestLoadConfig_RootParentConfig verifies that a candidate config at the FS
+// root (configDir ".") — a parent/root config in the layering model — applies
+// to frames under baseDir, alongside the deeper service config, rather than
+// being silently excluded by a needle like "internal/./".
+func TestLoadConfig_RootParentConfig(t *testing.T) {
+	hasToken := func(t *testing.T, cfg *Config, name string) {
+		t.Helper()
+		for _, tok := range cfg.Tokens {
+			if tok.Name == name {
+				return
+			}
+		}
+		t.Errorf("expected merged config to contain token %q; got %+v", name, cfg.Tokens)
+	}
+
+	t.Run("non-dot baseDir", func(t *testing.T) {
+		fsys := &WrappedFS{FS: fstest.MapFS{
+			"smarterr.hcl":             &fstest.MapFile{Data: []byte(`token "root" {}`)},
+			"service/amp/smarterr.hcl": &fstest.MapFile{Data: []byte(`token "amp" {}`)},
+		}}
+		cfg, err := LoadConfig(context.Background(), fsys, []string{"x/y/z/internal/service/amp/resource.go"}, "internal")
+		if err != nil {
+			t.Fatalf("LoadConfig error: %v", err)
+		}
+		hasToken(t, cfg, "root")
+		hasToken(t, cfg, "amp")
+	})
+
+	t.Run("dot baseDir", func(t *testing.T) {
+		fsys := &WrappedFS{FS: fstest.MapFS{
+			"smarterr.hcl":         &fstest.MapFile{Data: []byte(`token "root" {}`)},
+			"service/smarterr.hcl": &fstest.MapFile{Data: []byte(`token "svc" {}`)},
+		}}
+		cfg, err := LoadConfig(context.Background(), fsys, []string{"/abs/proj/service/amp/resource.go"}, ".")
+		if err != nil {
+			t.Fatalf("LoadConfig error: %v", err)
+		}
+		hasToken(t, cfg, "root")
+		hasToken(t, cfg, "svc")
+	})
+}
+
 func TestLoadConfig_ExtraConfigNotIncluded(t *testing.T) {
 	fsys := &WrappedFS{FS: fstest.MapFS{
 		"service/smarterr.hcl":            &fstest.MapFile{Data: []byte(`token "foo" {}`)},

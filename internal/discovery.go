@@ -73,23 +73,35 @@ func collectConfigsForStack(ctx context.Context, fsys FileSystem, relStackPaths 
 	for _, configPath := range candidateConfigs {
 		Debugf("[collectConfigsForStack %s] checking candidate config %q", callID, configPath)
 		configDir := path.Dir(configPath)
-		needle := baseDir + sep + configDir
-		if baseDir == "." {
-			needle = configDir
+		// needle is the directory prefix a frame must sit under for this config
+		// to apply. It's matched at path-segment boundaries on both edges (see
+		// below). configDir == "." means the config sits at the base root — a
+		// parent/root config in the layering model — so it applies to every
+		// frame under baseDir (and to every captured frame when baseDir is also
+		// "."). Joining "." into the needle (e.g. "internal/./") would never
+		// match a real frame path, silently dropping such configs.
+		var needle string
+		switch {
+		case baseDir == "." && configDir == ".":
+			needle = "" // root/parent config with baseDir ".": applies to any frame
+		case baseDir == ".":
+			needle = configDir + sep
+		case configDir == ".":
+			needle = baseDir + sep
+		default:
+			needle = baseDir + sep + configDir + sep
 		}
-		// Match the candidate configDir as a full path segment, anchored on both
-		// edges. The trailing separator anchors the right edge, so "service/amp"
-		// doesn't match "service/amplify/..." (and acm/acmpca, account/
-		// accountaccess, bedrock/bedrockagent, ...). The left edge is anchored by
-		// requiring the needle at the start of the path or immediately after a
-		// separator, so "notinternal/service/amp/" (or "notservice/amp/" in
-		// baseDir "." mode) isn't mistaken for a real frame. A config at
-		// "<baseDir>/<configDir>/smarterr.hcl" applies to frames under
-		// "<baseDir>/<configDir>/", and frames always carry a file name, so the
-		// trailing separator is always present for a legitimate match.
-		needle += sep
+		// Anchor the match on both edges. The trailing separator anchors the
+		// right edge, so "service/amp" doesn't match "service/amplify/..." (and
+		// acm/acmpca, account/accountaccess, bedrock/bedrockagent, ...). The
+		// leading edge requires the needle at the start of the path or
+		// immediately after a separator, so "notinternal/service/amp/" (or
+		// "notservice/amp/" in baseDir "." mode) isn't mistaken for a frame under
+		// the configured root. Frames always carry a file name, so the trailing
+		// separator is present for a legitimate match. An empty needle (a root
+		// config in baseDir "." mode) matches any captured frame.
 		for _, stackPath := range relStackPaths {
-			if strings.HasPrefix(stackPath, needle) || strings.Contains(stackPath, sep+needle) {
+			if needle == "" || strings.HasPrefix(stackPath, needle) || strings.Contains(stackPath, sep+needle) {
 				cfg, err := loadConfigFile(ctx, fsys, configPath)
 				if err != nil {
 					Debugf("[collectConfigsForStack %s] error loading config %s: %v", callID, configPath, err)
