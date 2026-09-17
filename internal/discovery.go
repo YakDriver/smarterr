@@ -73,6 +73,14 @@ func collectConfigsForStack(ctx context.Context, fsys FileSystem, relStackPaths 
 		if baseDir == "." {
 			needle = configDir
 		}
+		// Require a trailing separator so the candidate configDir matches a full
+		// path segment. Without it, "service/amp" would match "service/amplify/..."
+		// (and acm/acmpca, account/accountaccess, bedrock/bedrockagent, ...),
+		// bleeding one service's config into another. A config at
+		// "<baseDir>/<configDir>/smarterr.hcl" applies to frames under
+		// "<baseDir>/<configDir>/", and frames always carry a file name, so the
+		// trailing separator is always present for a legitimate match.
+		needle += sep
 		for _, stackPath := range relStackPaths {
 			if strings.Contains(stackPath, needle) {
 				cfg, err := loadConfigFile(ctx, fsys, configPath)

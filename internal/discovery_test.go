@@ -88,6 +88,53 @@ func TestLoadConfig_DotBaseDirCandidate(t *testing.T) {
 	}
 }
 
+// TestLoadConfig_PrefixCollisionSiblings guards against one service's config
+// bleeding into another whose name shares a prefix (e.g. amp/amplify,
+// acm/acmpca). The candidate configDir must match a full path segment.
+func TestLoadConfig_PrefixCollisionSiblings(t *testing.T) {
+	fsys := &WrappedFS{FS: fstest.MapFS{
+		"service/smarterr.hcl":         &fstest.MapFile{Data: []byte(`token "base" {}`)},
+		"service/amp/smarterr.hcl":     &fstest.MapFile{Data: []byte(`token "amp" {}`)},
+		"service/amplify/smarterr.hcl": &fstest.MapFile{Data: []byte(`token "amplify" {}`)},
+		"service/acm/smarterr.hcl":     &fstest.MapFile{Data: []byte(`token "acm" {}`)},
+		"service/acmpca/smarterr.hcl":  &fstest.MapFile{Data: []byte(`token "acmpca" {}`)},
+	}}
+
+	tests := []struct {
+		name      string
+		frame     string
+		want      string // service token that must be present
+		mustNotBe string // sibling token that must be absent
+	}{
+		{"amplify frame does not pull amp", "x/y/z/internal/service/amplify/resource_app.go", "amplify", "amp"},
+		{"amp frame does not pull amplify", "x/y/z/internal/service/amp/workspace.go", "amp", "amplify"},
+		{"acmpca frame does not pull acm", "x/y/z/internal/service/acmpca/certificate_authority.go", "acmpca", "acm"},
+		{"acm frame does not pull acmpca", "x/y/z/internal/service/acm/certificate.go", "acm", "acmpca"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg, err := LoadConfig(context.Background(), fsys, []string{tc.frame}, "internal")
+			if err != nil {
+				t.Fatalf("LoadConfig error: %v", err)
+			}
+			names := map[string]bool{}
+			for _, tok := range cfg.Tokens {
+				names[tok.Name] = true
+			}
+			if !names["base"] {
+				t.Errorf("expected shared 'base' config, got: %v", names)
+			}
+			if !names[tc.want] {
+				t.Errorf("expected %q config for frame %q, got: %v", tc.want, tc.frame, names)
+			}
+			if names[tc.mustNotBe] {
+				t.Errorf("%q config must not bleed into %q; got: %v", tc.mustNotBe, tc.want, names)
+			}
+		})
+	}
+}
+
 func TestLoadConfig_ExtraConfigNotIncluded(t *testing.T) {
 	fsys := &WrappedFS{FS: fstest.MapFS{
 		"service/smarterr.hcl":            &fstest.MapFile{Data: []byte(`token "foo" {}`)},
