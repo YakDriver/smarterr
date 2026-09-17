@@ -116,7 +116,10 @@ func (rt *Runtime) applyTransforms(ctx context.Context, token *Token, value stri
 // Helper for strip_prefix
 func applyStripPrefix(value string, step TransformStep) string {
 	value = strings.TrimSpace(value)
-	if step.Value == nil {
+	// An absent or empty Value is a no-op: strings.CutPrefix(value, "") always
+	// reports a match without consuming anything, so an empty Value with
+	// recurse=true would loop forever.
+	if step.Value == nil || *step.Value == "" {
 		return value
 	}
 	if step.Recurse != nil && *step.Recurse {
@@ -140,7 +143,10 @@ func applyStripPrefix(value string, step TransformStep) string {
 // Helper for strip_suffix
 func applyStripSuffix(value string, step TransformStep) string {
 	value = strings.TrimSpace(value)
-	if step.Value == nil {
+	// An absent or empty Value is a no-op: strings.CutSuffix(value, "") always
+	// reports a match without consuming anything, so an empty Value with
+	// recurse=true would loop forever.
+	if step.Value == nil || *step.Value == "" {
 		return value
 	}
 	if step.Recurse != nil && *step.Recurse {
