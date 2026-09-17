@@ -133,7 +133,11 @@ func findAllConfigPaths(ctx context.Context, fsys FileSystem) (globalConfig stri
 		if err != nil || d.IsDir() {
 			return nil
 		}
-		if !strings.HasSuffix(walkPath, ConfigFileName) {
+		// Match the exact file name, not a suffix: HasSuffix would also accept
+		// "notsmarterr.hcl", and a root-level file like that would be applied to
+		// every matching stack (see collectConfigsForStack's root-config
+		// handling). ConfigFileName is documented as the file name.
+		if path.Base(walkPath) != ConfigFileName {
 			return nil
 		}
 		if strings.HasPrefix(walkPath, "smarterr/") {

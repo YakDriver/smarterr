@@ -1,7 +1,7 @@
 package smarterr
 
 import (
-	"context"
+	"path"
 	"reflect"
 	"testing"
 )
@@ -147,30 +147,25 @@ func TestCaptureStack_NotTruncated(t *testing.T) {
 	}
 }
 
-// TestCollectRelStackPaths_FindsDeepCaller verifies that, through several nested
-// wrapper frames, collectRelStackPaths still captures this test file's frame.
-// The test binary lives under the module path, so baseDir "smarterr" appears in
-// the frame's file path.
+// TestCollectRelStackPaths_FindsDeepCaller verifies the full discovery path
+// (captureCallers -> frameFiles -> relStackPathsFromFiles) captures a caller
+// frame that sits far below the smarterr entry point, guarding against
+// reintroducing a fixed-depth stack cap. The wrapper chain lives in
+// stack_helper_test.go, so only this test's own frame resolves to
+// "stack_test.go"; a truncated capture would keep only the nearby wrapper
+// frames and never reach it. Dot mode avoids assuming anything about the
+// checkout path.
 func TestCollectRelStackPaths_FindsDeepCaller(t *testing.T) {
-	got := wrap1()
+	const depth = 20 // deeper than any previous fixed cap (5/10/16)
+	got := deepWrapper(depth)
 	var found bool
 	for _, p := range got {
-		if hasSuffix(p, "stack_test.go") {
+		if path.Base(p) == "stack_test.go" {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Errorf("collectRelStackPaths did not capture the deep caller frame; got %#v", got)
+		t.Errorf("collectRelStackPaths did not capture the deep caller frame (stack_test.go) through a %d-deep chain; got %#v", depth, got)
 	}
-}
-
-// A short chain of wrappers standing in for smerr shim -> smarterr sink layers.
-func wrap1() []string { return wrap2() }
-func wrap2() []string { return wrap3() }
-func wrap3() []string { return wrap4() }
-func wrap4() []string { return collectRelStackPaths(context.Background(), "smarterr") }
-
-func hasSuffix(s, suffix string) bool {
-	return len(s) >= len(suffix) && s[len(s)-len(suffix):] == suffix
 }
