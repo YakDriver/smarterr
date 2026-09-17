@@ -135,6 +135,36 @@ func TestLoadConfig_PrefixCollisionSiblings(t *testing.T) {
 	}
 }
 
+// TestLoadConfig_LeftBoundary guards the left edge of the segment match: a
+// directory that merely ends with the configured baseDir/configDir name (e.g.
+// "notinternal", "notservice") must not be treated as a frame under the root.
+func TestLoadConfig_LeftBoundary(t *testing.T) {
+	fsys := &WrappedFS{FS: fstest.MapFS{
+		"service/smarterr.hcl":     &fstest.MapFile{Data: []byte(`token "base" {}`)},
+		"service/amp/smarterr.hcl": &fstest.MapFile{Data: []byte(`token "amp" {}`)},
+	}}
+
+	// baseDir "internal": "notinternal/service/amp/..." must match nothing.
+	cfg, err := LoadConfig(context.Background(), fsys, []string{"x/y/notinternal/service/amp/file.go"}, "internal")
+	if err != nil {
+		t.Fatalf("LoadConfig error: %v", err)
+	}
+	for _, tok := range cfg.Tokens {
+		t.Errorf("frame under \"notinternal\" must not match any internal config; got token %q", tok.Name)
+	}
+
+	// baseDir ".": "notservice/amp/..." must not match "service/amp".
+	cfg2, err := LoadConfig(context.Background(), fsys, []string{"/abs/proj/notservice/amp/file.go"}, ".")
+	if err != nil {
+		t.Fatalf("LoadConfig error: %v", err)
+	}
+	for _, tok := range cfg2.Tokens {
+		if tok.Name == "amp" {
+			t.Errorf("frame under \"notservice\" must not match \"service/amp\"; got token %q", tok.Name)
+		}
+	}
+}
+
 func TestLoadConfig_ExtraConfigNotIncluded(t *testing.T) {
 	fsys := &WrappedFS{FS: fstest.MapFS{
 		"service/smarterr.hcl":            &fstest.MapFile{Data: []byte(`token "foo" {}`)},
