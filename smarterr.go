@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"runtime"
+	"strings"
 	"sync/atomic"
 
 	"github.com/YakDriver/smarterr/internal"
@@ -429,23 +430,61 @@ func addFallbackConfigError(add func(summary, detail string), err error, cfgErr 
 func collectRelStackPaths(ctx context.Context, baseDir string) []string {
 	_, callID := globalCallID(ctx)
 	Debugf("[collectRelStackPaths %s] called with baseDir=%q", callID, baseDir)
-	const stackDepth = 5
-	pcs := make([]uintptr, stackDepth)
-	n := runtime.Callers(2, pcs)
-	frames := runtime.CallersFrames(pcs[:n])
-	var relStackPaths []string
-	for i := range n {
-		frame, more := frames.Next()
-		if frame.File != "" && baseDir != "" {
-			idx := indexOf(frame.File, baseDir+"/")
-			if idx != -1 {
-				rel := frame.File[idx+len(baseDir)+1:]
-				Debugf("Stack frame %d: file=%q rel=%q", i, frame.File, rel)
-				relStackPaths = append(relStackPaths, rel)
-			}
+	// skip: runtime.Callers, captureCallers, collectRelStackPaths -> start at the caller.
+	paths := relStackPathsFromFiles(frameFiles(captureCallers(3)), baseDir)
+	Debugf("[collectRelStackPaths %s] relStackPaths=%v", callID, paths)
+	return paths
+}
+
+// captureCallers returns the program counters for the entire current call stack,
+// skipping the first 'skip' frames. It grows its buffer until the whole stack
+// fits, so a deep chain of wrapper layers (e.g. a host shim over the list sinks)
+// can never truncate the frame we need for config discovery. Errors are not a
+// hot path, so capturing the full stack is inexpensive.
+func captureCallers(skip int) []uintptr {
+	pcs := make([]uintptr, 64)
+	for {
+		n := runtime.Callers(skip, pcs)
+		if n < len(pcs) {
+			return pcs[:n]
 		}
+		pcs = make([]uintptr, 2*len(pcs))
+	}
+}
+
+// frameFiles resolves program counters to their source file paths.
+func frameFiles(pcs []uintptr) []string {
+	if len(pcs) == 0 {
+		return nil
+	}
+	frames := runtime.CallersFrames(pcs)
+	var files []string
+	for {
+		frame, more := frames.Next()
+		files = append(files, frame.File)
 		if !more {
 			break
+		}
+	}
+	return files
+}
+
+// relStackPathsFromFiles returns, for each file that contains baseDir as a path
+// segment, the substring starting at baseDir (e.g. "internal/service/amp/x.go").
+// Config discovery matches these against "<baseDir>/<configDir>", so the baseDir
+// prefix is retained. Files that don't sit under baseDir are ignored.
+func relStackPathsFromFiles(files []string, baseDir string) []string {
+	if baseDir == "" {
+		return nil
+	}
+	needle := baseDir + "/"
+	var relStackPaths []string
+	for _, file := range files {
+		if file == "" {
+			continue
+		}
+		if idx := strings.Index(file, needle); idx != -1 {
+			relStackPaths = append(relStackPaths, file[idx:])
 		}
 	}
 	return relStackPaths
@@ -533,8 +572,4 @@ func firstNWords(err error, n int) string {
 		}
 	}
 	return err.Error() // less than n words
-}
-
-func indexOf(s, substr string) int {
-	return len(s) - len(substr) - len(s[len(substr):])
 }
