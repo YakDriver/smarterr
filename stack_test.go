@@ -128,6 +128,25 @@ func deepCapture(remaining int) int {
 	return len(captureCallers(0))
 }
 
+// deepStack recurses `remaining` times and then calls captureStack, the origin
+// capture behind NewError/Errorf that feeds error_stack tokens (#76).
+func deepStack(remaining int) int {
+	if remaining > 0 {
+		return deepStack(remaining - 1)
+	}
+	return len(captureStack(0))
+}
+
+// TestCaptureStack_NotTruncated guards against the old fixed 16-frame buffer in
+// captureStack, which silently dropped the origin frame for deep call chains
+// and broke error_stack-sourced tokens (#76).
+func TestCaptureStack_NotTruncated(t *testing.T) {
+	const depth = 40 // well beyond the old 16-frame cap
+	if n := deepStack(depth); n < depth {
+		t.Errorf("captureStack captured %d frames through a %d-deep chain; deep stack was truncated", n, depth)
+	}
+}
+
 // TestCollectRelStackPaths_FindsDeepCaller verifies that, through several nested
 // wrapper frames, collectRelStackPaths still captures this test file's frame.
 // The test binary lives under the module path, so baseDir "smarterr" appears in

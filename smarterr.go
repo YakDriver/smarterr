@@ -398,18 +398,10 @@ func appendCommon(ctx context.Context, add func(summary, detail string), err err
 
 // captureStack returns a slice of runtime.Frames for the current call stack, skipping 'skip' frames.
 func captureStack(skip int) []runtime.Frame {
-	pcs := make([]uintptr, 16)
-	n := runtime.Callers(skip, pcs)
-	frames := runtime.CallersFrames(pcs[:n])
-	var stack []runtime.Frame
-	for {
-		frame, more := frames.Next()
-		stack = append(stack, frame)
-		if !more {
-			break
-		}
-	}
-	return stack
+	// skip + 1 accounts for internal.CaptureFrames' own frame. The growing
+	// buffer means deep wrapper chains are never silently truncated (previously
+	// capped at 16 frames, dropping the origin frame for error_stack tokens).
+	return internal.CaptureFrames(skip + 1)
 }
 
 // addFallbackInitError handles the fallback for missing FS.
@@ -448,18 +440,11 @@ func collectRelStackPaths(ctx context.Context, baseDir string) []string {
 
 // captureCallers returns the program counters for the entire current call stack,
 // skipping the first 'skip' frames. It grows its buffer until the whole stack
-// fits, so a deep chain of wrapper layers (e.g. a host shim over the list sinks)
-// can never truncate the frame we need for config discovery. Errors are not a
-// hot path, so capturing the full stack is inexpensive.
+// fits (via internal.CaptureCallers), so a deep chain of wrapper layers (e.g. a
+// host shim over the list sinks) can never truncate the frame we need for config
+// discovery. skip + 1 accounts for internal.CaptureCallers' own frame.
 func captureCallers(skip int) []uintptr {
-	pcs := make([]uintptr, 64)
-	for {
-		n := runtime.Callers(skip, pcs)
-		if n < len(pcs) {
-			return pcs[:n]
-		}
-		pcs = make([]uintptr, 2*len(pcs))
-	}
+	return internal.CaptureCallers(skip + 1)
 }
 
 // frameFiles resolves program counters to their source file paths.
