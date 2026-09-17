@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"runtime"
+	"strings"
 	"sync/atomic"
 
 	"github.com/YakDriver/smarterr/internal"
@@ -47,7 +48,17 @@ var glblCallID atomic.Uint64 // atomic counter for tracing
 func SetFS(fs FileSystem, baseDir string) {
 	Debugf("SetFS called with baseDir=%q", baseDir)
 	wrappedFS = fs
-	wrappedBaseDir = baseDir
+	// Normalize to forward slashes so path matching is consistent with io/fs
+	// paths (which always use "/") regardless of host OS.
+	wrappedBaseDir = toSlashPath(baseDir)
+}
+
+// toSlashPath normalizes OS path separators to forward slashes. Unlike
+// filepath.ToSlash (which only rewrites the host's separator, so it's a no-op
+// on non-Windows), this is host-independent: it always converts "\" to "/", so
+// Windows-style runtime frame paths match io/fs config paths on any OS.
+func toSlashPath(s string) string {
+	return strings.ReplaceAll(s, `\`, "/")
 }
 
 // AddEnrich is a plugin Framework helper function that enriches diagnostics with smarterr information.
@@ -387,18 +398,10 @@ func appendCommon(ctx context.Context, add func(summary, detail string), err err
 
 // captureStack returns a slice of runtime.Frames for the current call stack, skipping 'skip' frames.
 func captureStack(skip int) []runtime.Frame {
-	pcs := make([]uintptr, 16)
-	n := runtime.Callers(skip, pcs)
-	frames := runtime.CallersFrames(pcs[:n])
-	var stack []runtime.Frame
-	for {
-		frame, more := frames.Next()
-		stack = append(stack, frame)
-		if !more {
-			break
-		}
-	}
-	return stack
+	// skip + 1 accounts for internal.CaptureFrames' own frame. The growing
+	// buffer means deep wrapper chains are never silently truncated (previously
+	// capped at 16 frames, dropping the origin frame for error_stack tokens).
+	return internal.CaptureFrames(skip + 1)
 }
 
 // addFallbackInitError handles the fallback for missing FS.
@@ -429,23 +432,74 @@ func addFallbackConfigError(add func(summary, detail string), err error, cfgErr 
 func collectRelStackPaths(ctx context.Context, baseDir string) []string {
 	_, callID := globalCallID(ctx)
 	Debugf("[collectRelStackPaths %s] called with baseDir=%q", callID, baseDir)
-	const stackDepth = 5
-	pcs := make([]uintptr, stackDepth)
-	n := runtime.Callers(2, pcs)
-	frames := runtime.CallersFrames(pcs[:n])
-	var relStackPaths []string
-	for i := range n {
+	// skip: runtime.Callers, captureCallers, collectRelStackPaths -> start at the caller.
+	paths := relStackPathsFromFiles(frameFiles(captureCallers(3)), baseDir)
+	Debugf("[collectRelStackPaths %s] relStackPaths=%v", callID, paths)
+	return paths
+}
+
+// captureCallers returns the program counters for the entire current call stack,
+// skipping the first 'skip' frames. It grows its buffer until the whole stack
+// fits (via internal.CaptureCallers), so a deep chain of wrapper layers (e.g. a
+// host shim over the list sinks) can never truncate the frame we need for config
+// discovery. skip + 1 accounts for internal.CaptureCallers' own frame.
+func captureCallers(skip int) []uintptr {
+	return internal.CaptureCallers(skip + 1)
+}
+
+// frameFiles resolves program counters to their source file paths.
+func frameFiles(pcs []uintptr) []string {
+	if len(pcs) == 0 {
+		return nil
+	}
+	frames := runtime.CallersFrames(pcs)
+	var files []string
+	for {
 		frame, more := frames.Next()
-		if frame.File != "" && baseDir != "" {
-			idx := indexOf(frame.File, baseDir+"/")
-			if idx != -1 {
-				rel := frame.File[idx+len(baseDir)+1:]
-				Debugf("Stack frame %d: file=%q rel=%q", i, frame.File, rel)
-				relStackPaths = append(relStackPaths, rel)
-			}
-		}
+		files = append(files, frame.File)
 		if !more {
 			break
+		}
+	}
+	return files
+}
+
+// relStackPathsFromFiles returns, for each file that contains baseDir as a path
+// segment, the substring starting at baseDir (e.g. "internal/service/amp/x.go").
+// Config discovery matches these against "<baseDir>/<configDir>", so the baseDir
+// prefix is retained. Files that don't sit under baseDir are ignored.
+func relStackPathsFromFiles(files []string, baseDir string) []string {
+	if baseDir == "" {
+		return nil
+	}
+	// Work entirely in forward slashes: io/fs config paths always use "/", and
+	// runtime frame files may use the host separator (e.g. "\" on Windows).
+	baseDir = toSlashPath(baseDir)
+	var relStackPaths []string
+	needle := baseDir + "/"
+	leading := "/" + needle // baseDir as a full path segment, e.g. "/internal/"
+	for _, file := range files {
+		if file == "" {
+			continue
+		}
+		file = toSlashPath(file)
+		// baseDir "." means the embed root is the working directory. Runtime
+		// frame files are normally absolute and won't contain "./", so there's
+		// nothing to anchor on; pass the path through and let candidate matching
+		// (which uses the bare configDir in this mode) find it.
+		if baseDir == "." {
+			relStackPaths = append(relStackPaths, file)
+			continue
+		}
+		// Otherwise match baseDir only at a path-segment boundary: the file
+		// starts with "<baseDir>/", or "<baseDir>/" is preceded by a separator.
+		// This keeps frames like ".../notinternal/service/x.go" from
+		// masquerading as frames under the configured root.
+		switch {
+		case strings.HasPrefix(file, needle):
+			relStackPaths = append(relStackPaths, file)
+		case strings.Contains(file, leading):
+			relStackPaths = append(relStackPaths, file[strings.Index(file, leading)+1:])
 		}
 	}
 	return relStackPaths
@@ -533,8 +587,4 @@ func firstNWords(err error, n int) string {
 		}
 	}
 	return err.Error() // less than n words
-}
-
-func indexOf(s, substr string) int {
-	return len(s) - len(substr) - len(s[len(substr):])
 }
