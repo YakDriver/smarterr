@@ -477,8 +477,20 @@ func relStackPathsFromFiles(files []string, baseDir string) []string {
 	if baseDir == "" {
 		return nil
 	}
-	needle := baseDir + "/"
 	var relStackPaths []string
+	// baseDir "." means the embed root is the working directory. Runtime frame
+	// files are normally absolute and won't contain "./", so there's nothing to
+	// anchor on; pass non-empty paths through unchanged and let candidate
+	// matching (which uses the bare configDir in this mode) find them.
+	if baseDir == "." {
+		for _, file := range files {
+			if file != "" {
+				relStackPaths = append(relStackPaths, file)
+			}
+		}
+		return relStackPaths
+	}
+	needle := baseDir + "/"
 	for _, file := range files {
 		if file == "" {
 			continue

@@ -57,6 +57,37 @@ func TestLoadConfig_Simple(t *testing.T) {
 	}
 }
 
+// TestLoadConfig_DotBaseDirCandidate is the regression test for baseDir ".":
+// collectRelStackPaths passes absolute frame paths through unchanged, and
+// candidate matching uses the bare configDir. Guards against discarding all
+// frames in this mode (which would fall back to only the global config).
+func TestLoadConfig_DotBaseDirCandidate(t *testing.T) {
+	fsys := &WrappedFS{FS: fstest.MapFS{
+		"service/smarterr.hcl":       &fstest.MapFile{Data: []byte(`token "base" {}`)},
+		"service/amp/smarterr.hcl":   &fstest.MapFile{Data: []byte(`token "amp" {}`)},
+		"service/other/smarterr.hcl": &fstest.MapFile{Data: []byte(`token "other" {}`)},
+	}}
+	relStackPaths := []string{
+		"/abs/proj/service/amp/anomaly_detector_list.go",
+		"/usr/local/go/src/runtime/proc.go",
+	}
+
+	cfg, err := LoadConfig(context.Background(), fsys, relStackPaths, ".")
+	if err != nil {
+		t.Fatalf("LoadConfig error: %v", err)
+	}
+	names := map[string]bool{}
+	for _, tok := range cfg.Tokens {
+		names[tok.Name] = true
+	}
+	if !names["base"] || !names["amp"] {
+		t.Errorf("expected 'base' and 'amp' tokens discovered for baseDir \".\", got: %v", names)
+	}
+	if names["other"] {
+		t.Errorf("token 'other' should not be discovered, got: %v", names)
+	}
+}
+
 func TestLoadConfig_ExtraConfigNotIncluded(t *testing.T) {
 	fsys := &WrappedFS{FS: fstest.MapFS{
 		"service/smarterr.hcl":            &fstest.MapFile{Data: []byte(`token "foo" {}`)},

@@ -44,6 +44,25 @@ func TestRelStackPathsFromFiles_EmptyBaseDir(t *testing.T) {
 	}
 }
 
+// baseDir "." is a supported mode (embed root == working dir). Frame files are
+// absolute and can't be anchored on "./", so non-empty paths pass through so
+// candidate matching (bare configDir) can still find them.
+func TestRelStackPathsFromFiles_DotBaseDir(t *testing.T) {
+	files := []string{
+		"/abs/proj/service/amp/anomaly_detector_list.go",
+		"",
+		"/usr/local/go/src/runtime/proc.go",
+	}
+	got := relStackPathsFromFiles(files, ".")
+	want := []string{
+		"/abs/proj/service/amp/anomaly_detector_list.go",
+		"/usr/local/go/src/runtime/proc.go",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("relStackPathsFromFiles(., ...) = %#v, want %#v", got, want)
+	}
+}
+
 func TestRelStackPathsFromFiles_NoMatch(t *testing.T) {
 	files := []string{"/usr/local/go/src/runtime/proc.go", ""}
 	if got := relStackPathsFromFiles(files, "internal"); got != nil {
