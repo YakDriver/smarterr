@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"path/filepath"
+	"path"
 	"sort"
 	"strings"
 
@@ -47,8 +47,9 @@ func collectConfigsForStack(ctx context.Context, fsys FileSystem, relStackPaths 
 	Debugf("[collectConfigsForStack %s] called with baseDir=%q relStackPaths=%v", callID, baseDir, relStackPaths)
 	// Find all config files in
 	type configWithPath struct {
-		cfg  *Config
-		path string
+		cfg    *Config
+		path   string
+		global bool
 	}
 	var cfgsWithPaths []configWithPath
 	globalConfigPath, candidateConfigs, err := findAllConfigPaths(ctx, fsys)
@@ -62,34 +63,70 @@ func collectConfigsForStack(ctx context.Context, fsys FileSystem, relStackPaths 
 		if err != nil {
 			return nil, fmt.Errorf("error loading global config: %w", err)
 		}
-		cfgsWithPaths = append(cfgsWithPaths, configWithPath{cfg, globalConfigPath})
+		cfgsWithPaths = append(cfgsWithPaths, configWithPath{cfg, globalConfigPath, true})
 	}
 
-	sep := string(filepath.Separator)
+	// io/fs paths (config paths and the embedded FS) always use "/", and frame
+	// paths are normalized to "/" upstream, so match on "/" regardless of host
+	// OS. Using filepath.Separator here would break discovery on Windows.
+	const sep = "/"
+	baseDir = strings.ReplaceAll(baseDir, `\`, sep)
 	for _, configPath := range candidateConfigs {
 		Debugf("[collectConfigsForStack %s] checking candidate config %q", callID, configPath)
-		configDir := filepath.Dir(configPath)
-		needle := baseDir + sep + configDir
-		if baseDir == "." {
-			needle = configDir
+		configDir := path.Dir(configPath)
+		// needle is the directory prefix a frame must sit under for this config
+		// to apply. It's matched at path-segment boundaries on both edges (see
+		// below). configDir == "." means the config sits at the base root — a
+		// parent/root config in the layering model — so it applies to every
+		// frame under baseDir (and to every captured frame when baseDir is also
+		// "."). Joining "." into the needle (e.g. "internal/./") would never
+		// match a real frame path, silently dropping such configs.
+		var needle string
+		switch {
+		case baseDir == "." && configDir == ".":
+			needle = "" // root/parent config with baseDir ".": applies to any frame
+		case baseDir == ".":
+			needle = configDir + sep
+		case configDir == ".":
+			needle = baseDir + sep
+		default:
+			needle = baseDir + sep + configDir + sep
 		}
+		// Anchor the match on both edges. The trailing separator anchors the
+		// right edge, so "service/amp" doesn't match "service/amplify/..." (and
+		// acm/acmpca, account/accountaccess, bedrock/bedrockagent, ...). The
+		// leading edge requires the needle at the start of the path or
+		// immediately after a separator, so "notinternal/service/amp/" (or
+		// "notservice/amp/" in baseDir "." mode) isn't mistaken for a frame under
+		// the configured root. Frames always carry a file name, so the trailing
+		// separator is present for a legitimate match. An empty needle (a root
+		// config in baseDir "." mode) matches any captured frame.
 		for _, stackPath := range relStackPaths {
-			if strings.Contains(stackPath, needle) {
+			if needle == "" || strings.HasPrefix(stackPath, needle) || strings.Contains(stackPath, sep+needle) {
 				cfg, err := loadConfigFile(ctx, fsys, configPath)
 				if err != nil {
 					Debugf("[collectConfigsForStack %s] error loading config %s: %v", callID, configPath, err)
 					return nil, fmt.Errorf("error loading config %s: %w", configPath, err)
 				}
-				cfgsWithPaths = append(cfgsWithPaths, configWithPath{cfg, configPath})
+				cfgsWithPaths = append(cfgsWithPaths, configWithPath{cfg, configPath, false})
 				Debugf("[collectConfigsForStack %s] matched config %q for stack path %q", callID, configPath, stackPath)
 				break // Only need to match once per config
 			}
 			Debugf("[collectConfigsForStack %s] config %q did not match, stackPath (%s) does not contain needle (%s)", callID, configPath, stackPath, needle)
 		}
 	}
-	// Sort by path depth (least specific first, most specific last)
-	sort.Slice(cfgsWithPaths, func(i, j int) bool {
-		return strings.Count(cfgsWithPaths[i].path, sep) < strings.Count(cfgsWithPaths[j].path, sep)
+	// Sort least specific first, most specific last, so mergeConfigs applies
+	// global -> parent -> local (later entries override earlier). The designated
+	// global config is "more global than a parent" per the layering model, so it
+	// always sorts first even though a root candidate ("smarterr.hcl", depth 0)
+	// is shallower than "smarterr/smarterr.hcl" (depth 1). SliceStable keeps a
+	// deterministic order among equal-depth candidates.
+	sort.SliceStable(cfgsWithPaths, func(i, j int) bool {
+		a, b := cfgsWithPaths[i], cfgsWithPaths[j]
+		if a.global != b.global {
+			return a.global // global config sorts before everything else
+		}
+		return strings.Count(a.path, sep) < strings.Count(b.path, sep)
 	})
 	var configs []*Config
 	for _, c := range cfgsWithPaths {
@@ -102,17 +139,21 @@ func collectConfigsForStack(ctx context.Context, fsys FileSystem, relStackPaths 
 func findAllConfigPaths(ctx context.Context, fsys FileSystem) (globalConfig string, candidateConfigs []string, err error) {
 	callID := globalCallID(ctx)
 	Debugf("[findAllConfigPaths %s] scanning filesystem for config files", callID)
-	err = fsys.WalkDir(".", func(path string, d fs.DirEntry, err error) error {
+	err = fsys.WalkDir(".", func(walkPath string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return nil
 		}
-		if !strings.HasSuffix(path, ConfigFileName) {
+		// Match the exact file name, not a suffix: HasSuffix would also accept
+		// "notsmarterr.hcl", and a root-level file like that would be applied to
+		// every matching stack (see collectConfigsForStack's root-config
+		// handling). ConfigFileName is documented as the file name.
+		if path.Base(walkPath) != ConfigFileName {
 			return nil
 		}
-		if strings.HasPrefix(path, "smarterr/") {
-			globalConfig = path
+		if strings.HasPrefix(walkPath, "smarterr/") {
+			globalConfig = walkPath
 		} else {
-			candidateConfigs = append(candidateConfigs, path)
+			candidateConfigs = append(candidateConfigs, walkPath)
 		}
 		return nil
 	})

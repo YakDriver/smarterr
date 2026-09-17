@@ -503,22 +503,14 @@ func (rt *Runtime) BuildTokenValueMap(ctx context.Context) map[string]any {
 
 // gatherCallStack retrieves the call stack frames, skipping the specified number of frames.
 func gatherCallStack(skip int) ([]runtime.Frame, error) {
-	callers := make([]uintptr, 10) // Adjust size as needed
-	n := runtime.Callers(skip, callers)
-	if n == 0 {
+	// skip + 1 accounts for CaptureFrames' own frame. The growing buffer means
+	// deep wrapper chains are never silently truncated (previously capped at 10
+	// frames, dropping the target frame for the call_stack "happening" token).
+	frames := CaptureFrames(skip + 1)
+	if len(frames) == 0 {
 		return nil, fmt.Errorf("no call stack available")
 	}
-
-	frames := runtime.CallersFrames(callers[:n])
-	var result []runtime.Frame
-	for {
-		frame, more := frames.Next()
-		result = append(result, frame)
-		if !more {
-			break
-		}
-	}
-	return result, nil
+	return frames, nil
 }
 
 // processStackMatches processes the stack frames and matches them against the StackMatch rules.
