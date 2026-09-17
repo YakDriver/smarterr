@@ -70,6 +70,25 @@ func TestRelStackPathsFromFiles_NoMatch(t *testing.T) {
 	}
 }
 
+// baseDir must match only at a path-segment boundary. A directory that merely
+// contains baseDir as a substring (e.g. "notinternal") must not be treated as a
+// frame under the configured root; a genuine "/internal/" segment must be.
+func TestRelStackPathsFromFiles_SegmentBoundary(t *testing.T) {
+	files := []string{
+		"/deps/notinternal/service/amp/x.go",          // substring, not a segment: ignore
+		"/deps/notinternal/internal/service/amp/y.go", // real "/internal/" segment: keep from there
+		"internal/service/amp/z.go",                   // baseDir at start: keep as-is
+	}
+	got := relStackPathsFromFiles(files, "internal")
+	want := []string{
+		"internal/service/amp/y.go",
+		"internal/service/amp/z.go",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("relStackPathsFromFiles() = %#v, want %#v", got, want)
+	}
+}
+
 // TestCaptureCallers_NotTruncated proves the capture is not limited to the old
 // fixed depth of 5: a call chain deeper than that must still yield every frame.
 // This is the regression guard for the config-discovery truncation bug.

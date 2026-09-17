@@ -491,11 +491,20 @@ func relStackPathsFromFiles(files []string, baseDir string) []string {
 		return relStackPaths
 	}
 	needle := baseDir + "/"
+	sep := "/" + needle // baseDir as a full path segment, e.g. "/internal/"
 	for _, file := range files {
 		if file == "" {
 			continue
 		}
-		if idx := strings.Index(file, needle); idx != -1 {
+		// Only match baseDir at a path-segment boundary: either the file starts
+		// with "<baseDir>/", or "<baseDir>/" is preceded by a separator. This
+		// keeps frames like ".../notinternal/service/x.go" from masquerading as
+		// frames under the configured root.
+		switch {
+		case strings.HasPrefix(file, needle):
+			relStackPaths = append(relStackPaths, file)
+		case strings.Contains(file, sep):
+			idx := strings.Index(file, sep) + 1 // skip the leading separator
 			relStackPaths = append(relStackPaths, file[idx:])
 		}
 	}
