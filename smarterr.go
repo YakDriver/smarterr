@@ -215,7 +215,7 @@ func AddError(ctx context.Context, diags *fwdiag.Diagnostics, err error, keyvals
 //   - These templates control the summary and detail for diagnostics created from errors via Append.
 //   - If these templates are not defined, a fallback using the original error is used.
 //   - Note: All output is a diagnostic; the template name refers to the input type (error vs. diagnostic).
-func Append(ctx context.Context, diags sdkdiag.Diagnostics, err error, keyvals ...any) sdkdiag.Diagnostics {
+func Append(ctx context.Context, diags sdkdiag.Diagnostics, err error, keyvals ...any) (out sdkdiag.Diagnostics) {
 	ctx, callID := globalCallID(ctx)
 	Debugf("[Append %s] called with error: %v", callID, err)
 	defer func() {
@@ -238,7 +238,9 @@ func Append(ctx context.Context, diags sdkdiag.Diagnostics, err error, keyvals .
 			}
 			panicMsg += "]"
 			detail += panicMsg
-			diags = append(diags, sdkdiag.Diagnostic{
+			// Assign the named return, not the diags param: a deferred
+			// reassignment only affects the result through a named return.
+			out = append(diags, sdkdiag.Diagnostic{
 				Severity: sdkdiag.Error,
 				Summary:  summary,
 				Detail:   detail,
@@ -273,7 +275,7 @@ func AppendOne(ctx context.Context, existing sdkdiag.Diagnostics, incoming sdkdi
 }
 
 // AppendEnrich appends incoming SDK diagnostics to existing SDK diagnostics with enrichment
-func AppendEnrich(ctx context.Context, existing sdkdiag.Diagnostics, incoming sdkdiag.Diagnostics, keyvals ...any) sdkdiag.Diagnostics {
+func AppendEnrich(ctx context.Context, existing sdkdiag.Diagnostics, incoming sdkdiag.Diagnostics, keyvals ...any) (out sdkdiag.Diagnostics) {
 	ctx, callID := globalCallID(ctx)
 	Debugf("[AppendEnrich %s] called with len(incoming): %d, keyvals: %v", callID, len(incoming), keyvals)
 
@@ -282,10 +284,19 @@ func AppendEnrich(ctx context.Context, existing sdkdiag.Diagnostics, incoming sd
 		return existing
 	}
 
+	// Snapshot the caller's diagnostics before enrichment: the loop below
+	// appends enriched entries to `existing`, so on panic (e.g. a consumer
+	// Logger panicking in emitLogTemplates) rebuilding from `existing` would
+	// mix partially-enriched entries with a second copy of `incoming`. Recover
+	// from this snapshot to return the intended fallback (original + incoming).
+	original := existing
+
 	defer func() {
 		if r := recover(); r != nil {
 			Debugf("[AppendEnrich %s] Panic recovered: %v", callID, r)
-			existing = append(existing, incoming...)
+			// Assign the named return, not the existing param: a deferred
+			// reassignment only affects the result through a named return.
+			out = append(original, incoming...)
 		}
 	}()
 
