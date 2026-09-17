@@ -284,12 +284,19 @@ func AppendEnrich(ctx context.Context, existing sdkdiag.Diagnostics, incoming sd
 		return existing
 	}
 
+	// Snapshot the caller's diagnostics before enrichment: the loop below
+	// appends enriched entries to `existing`, so on panic (e.g. a consumer
+	// Logger panicking in emitLogTemplates) rebuilding from `existing` would
+	// mix partially-enriched entries with a second copy of `incoming`. Recover
+	// from this snapshot to return the intended fallback (original + incoming).
+	original := existing
+
 	defer func() {
 		if r := recover(); r != nil {
 			Debugf("[AppendEnrich %s] Panic recovered: %v", callID, r)
 			// Assign the named return, not the existing param: a deferred
 			// reassignment only affects the result through a named return.
-			out = append(existing, incoming...)
+			out = append(original, incoming...)
 		}
 	}()
 
