@@ -544,7 +544,7 @@ func emitLogTemplates(ctx context.Context, cfg *internal.Config, values map[stri
 	ctx, callID := globalCallID(ctx)
 	Debugf("[emitLogTemplates %s] called with severity: %s", callID, severity)
 	if globalLogger == nil {
-		Debugf("[emitLogTemplates %s] No globalLogger set; skipping user-facing log emission")
+		Debugf("[emitLogTemplates %s] No globalLogger set; skipping user-facing log emission", callID)
 		return
 	}
 	var key string
