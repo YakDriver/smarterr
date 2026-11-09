@@ -1,5 +1,22 @@
 SHELL := /bin/bash
 
+# TEMPORARY: The go fix bundled with the current Go release lacks some
+# analyzers available in the standalone modernize command. The fix-extra and
+# fix-extra-check targets run only the ones go fix is still missing. Once
+# `go tool fix help` lists all of MODERNIZE_EXTRA_ANALYZERS, those targets skip
+# themselves; remove them (and these variables) at that point.
+MODERNIZE_EXTRA_ANALYZERS ?= importcomment reflecttypeassert slicesclip
+MODERNIZE_VERSION         ?= v0.52.0
+MODERNIZE                 := golang.org/x/tools/go/analysis/passes/modernize/cmd/modernize@$(MODERNIZE_VERSION)
+
+# Prints modernize flags (e.g., -slicesclip) for analyzers go fix doesn't have.
+MODERNIZE_MISSING_FLAGS = \
+	available=$$(go tool fix help | awk '/^Registered analyzers:/{f=1;next} /^By default/{f=0} f && NF{print $$1}') || exit 1; \
+	flags=""; \
+	for a in $(MODERNIZE_EXTRA_ANALYZERS); do \
+		grep -qx "$$a" <<<"$$available" || flags="$$flags -$$a"; \
+	done
+
 default: build
 
 build: ## Build the project and install the binary to $GOBIN
@@ -20,13 +37,35 @@ coverage-root-cli: ## Run coverage for root and CLI packages
 	@go test -coverprofile=other.coverage.out . ./cmd/smarterr/...
 	@go tool cover -func=other.coverage.out
 
-fix: ## Apply go fix (modernizes Go idioms)
+fix: ## Apply go fix plus modernize analyzers missing from go fix
 	@echo "make: Applying go fix..."
 	@go fix ./...
+	@$(MAKE) --no-print-directory fix-extra
 
-fix-check: ## [CI] Go Fix Check / go fix
+fix-check: ## [CI] Go Fix Check / go fix plus modernize analyzers missing from go fix
 	@echo "make: Checking go fix..."
-	@go fix -diff ./... || { echo 'Code needs go fix. Run `make fix`.'; exit 1; }
+	@rc=0; \
+	go fix -diff ./... || { echo 'Code needs go fix. Run `make fix`.'; rc=1; }; \
+	$(MAKE) --no-print-directory fix-extra-check || rc=1; \
+	exit $$rc
+
+fix-extra: ## Apply modernize analyzers missing from go fix (temporary)
+	@$(MODERNIZE_MISSING_FLAGS); \
+	if [ -z "$$flags" ]; then \
+		echo "make: go fix now includes all of: $(MODERNIZE_EXTRA_ANALYZERS). Remove fix-extra targets from GNUmakefile."; \
+		exit 0; \
+	fi; \
+	echo "make: Applying modernize$$flags..."; \
+	go run $(MODERNIZE) -fix $$flags ./...
+
+fix-extra-check: ## Check modernize analyzers missing from go fix (temporary)
+	@$(MODERNIZE_MISSING_FLAGS); \
+	if [ -z "$$flags" ]; then \
+		echo "make: go fix now includes all of: $(MODERNIZE_EXTRA_ANALYZERS). Remove fix-extra targets from GNUmakefile."; \
+		exit 0; \
+	fi; \
+	echo "make: Checking modernize$$flags..."; \
+	go run $(MODERNIZE) $$flags ./... || { echo 'Code needs modernize fixes. Run `make fix`.'; exit 1; }
 
 fmt: ## Format Go source code in all packages
 	@echo "make: Formatting source code with gofmt..."
@@ -84,6 +123,8 @@ vulncheck: ## Run govulncheck for known vulnerabilities
 	coverage-root-cli \
 	fix \
 	fix-check \
+	fix-extra \
+	fix-extra-check \
 	fmt \
 	fmt-check \
 	help \
