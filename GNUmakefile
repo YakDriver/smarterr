@@ -20,6 +20,14 @@ coverage-root-cli: ## Run coverage for root and CLI packages
 	@go test -coverprofile=other.coverage.out . ./cmd/smarterr/...
 	@go tool cover -func=other.coverage.out
 
+fix: ## Apply go fix (modernizes Go idioms)
+	@echo "make: Applying go fix..."
+	@go fix ./...
+
+fix-check: ## [CI] Go Fix Check / go fix
+	@echo "make: Checking go fix..."
+	@go fix -diff ./... || { echo 'Code needs go fix. Run `make fix`.'; exit 1; }
+
 fmt: ## Format Go source code in all packages
 	@echo "make: Formatting source code with gofmt..."
 	@find . -name '*.go' -exec gofmt -s -w {} +
@@ -41,14 +49,6 @@ install: build ## Build and install the binary
 
 lint: ## Run golangci-lint
 	@golangci-lint run
-
-modern: ## Fix code to use modern Go idioms
-	@echo "make: Fixing checks for modern Go code..."
-	@go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest -fix -test ./...
-
-modern-check: ## Check for modern Go idioms
-	@echo "make: Checking for modern Go code..."
-	@go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest -test ./...
 
 staticcheck: ## Run staticcheck linter
 	@staticcheck ./...
@@ -82,13 +82,13 @@ vulncheck: ## Run govulncheck for known vulnerabilities
 	coverage-internal \
 	coverage-internal-check \
 	coverage-root-cli \
+	fix \
+	fix-check \
 	fmt \
 	fmt-check \
 	help \
 	install \
 	lint \
-	modern \
-	modern-check \
 	staticcheck \
 	test \
 	tidy \

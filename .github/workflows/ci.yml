@@ -100,5 +100,5 @@ jobs:
       - name: Vulnerability check
         run: make vulncheck
 
-      - name: Modern Go code check
-        run: make modern-check
+      - name: Go fix check
+        run: make fix-check
