@@ -100,5 +100,7 @@ jobs:
       - name: Vulnerability check
         run: make vulncheck
 
-      - name: Modern Go code check
-        run: make modern-check
+      # Runs go fix plus the modernize analyzers go fix is still missing
+      # (see MODERNIZE_EXTRA_ANALYZERS in GNUmakefile).
+      - name: Go fix check
+        run: make fix-check
